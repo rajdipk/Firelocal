@@ -393,7 +393,7 @@ cargo install firelocal-cli
 
 Or build from source:
 ```bash
-git clone https://github.com/yourusername/firelocal.git
+git clone https://github.com/rajdipk/Firelocal.git
 cd firelocal/firelocal-cli
 cargo install --path .
 ```
@@ -1782,9 +1782,9 @@ project/
 ### Contributing
 
 We welcome contributions! Please see:
-- GitHub: https://github.com/yourusername/firelocal
-- Issues: https://github.com/yourusername/firelocal/issues
-- Pull Requests: https://github.com/yourusername/firelocal/pulls
+- GitHub: https://github.com/rajdipk/Firelocal
+- Issues: https://github.com/rajdipk/Firelocal/issues
+- Pull Requests: https://github.com/rajdipk/Firelocal/pulls
 
 ### License
 
@@ -1794,4 +1794,4 @@ MIT License - see LICENSE file for details.
 
 **Made with ❤️ using Rust 🦀**
 
-For more information, visit: https://github.com/yourusername/firelocal
+For more information, visit: https://github.com/rajdipk/Firelocal

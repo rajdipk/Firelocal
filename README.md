@@ -280,7 +280,7 @@ MIT License - see LICENSE file for details
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/firelocal/issues)
+- **Issues**: [GitHub Issues](https://github.com/rajdipk/Firelocal/issues)
 - **Documentation**: See `docs/` directory
 - **Examples**: See `examples/` directory
 
