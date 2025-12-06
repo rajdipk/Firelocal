@@ -1,0 +1,22 @@
+name: firelocal_dart
+description: Offline-first database with Firestore API compatibility for Dart/Flutter
+version: 0.1.0
+homepage: https://github.com/yourusername/firelocal
+
+environment:
+  sdk: ">=3.0.0 <4.0.0"
+
+dependencies:
+  ffi: ^2.1.0
+  path: ^1.8.3
+
+dev_dependencies:
+  lints: ^3.0.0
+  test: ^1.24.0
+
+platforms:
+  android:
+  ios:
+  linux:
+  macos:
+  windows:

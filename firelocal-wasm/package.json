@@ -1,0 +1,33 @@
+{
+    "name": "firelocal-wasm",
+    "version": "0.1.0",
+    "description": "FireLocal WASM bindings for browser use",
+    "main": "index.js",
+    "types": "index.d.ts",
+    "files": [
+        "firelocal_wasm_bg.wasm",
+        "firelocal_wasm.js",
+        "firelocal_wasm.d.ts",
+        "index.js",
+        "index.d.ts"
+    ],
+    "scripts": {
+        "build": "wasm-pack build --target web",
+        "build:nodejs": "wasm-pack build --target nodejs",
+        "build:bundler": "wasm-pack build --target bundler",
+        "test": "wasm-pack test --headless --firefox"
+    },
+    "keywords": [
+        "firestore",
+        "offline",
+        "database",
+        "wasm",
+        "indexeddb"
+    ],
+    "author": "FireLocal Team",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yourusername/firelocal"
+    }
+}

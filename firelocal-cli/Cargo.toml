@@ -1,0 +1,11 @@
+[package]
+name = "firelocal-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+firelocal-core = { path = "../firelocal-core" }
+clap = { version = "4.5", features = ["derive"] }
+rustyline = "14.0"
+anyhow = "1.0"
+owo-colors = "4.0" # For pretty output

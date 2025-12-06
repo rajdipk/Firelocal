@@ -1,0 +1,9 @@
+/target
+**/*.rs.bk
+Cargo.lock
+.env
+.idea
+.vscode
+*.iml
+*.swp
+.DS_Store
