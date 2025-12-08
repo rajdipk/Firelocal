@@ -1,6 +1,6 @@
-<div align="center">
-  <img src="assets/firelocal.png" alt="FireLocal Logo" width="200"/>
-  <h1>FireLocal</h1>
+<div align="center" style="background-color: #f8f9fa; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
+  <img src="assets/firelocal.png" alt="FireLocal Logo" width="300" style="max-width: 100%; height: auto;"/>
+  <h1 style="margin-top: 1rem;">FireLocal</h1>
   <p>
     <strong>Offline-first database with Firestore API compatibility</strong>
   </p>
