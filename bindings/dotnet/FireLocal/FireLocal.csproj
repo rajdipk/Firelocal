@@ -10,7 +10,7 @@
     <Authors>FireLocal Team</Authors>
     <Description>Offline-first database with Firestore API compatibility for .NET</Description>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <RepositoryUrl>https://github.com/yourusername/firelocal</RepositoryUrl>
+    <RepositoryUrl>https://github.com/rajdipk/Firelocal</RepositoryUrl>
     <PackageTags>firestore;offline;database;nosql</PackageTags>
   </PropertyGroup>
 

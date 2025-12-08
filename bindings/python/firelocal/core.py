@@ -37,7 +37,60 @@ def _get_library_path():
 
 
 # Load the library
-_lib = ctypes.CDLL(_get_library_path())
+try:
+    _lib = ctypes.CDLL(_get_library_path())
+    
+    # Define function signatures
+    _lib.firelocal_open.argtypes = [ctypes.c_char_p]
+    _lib.firelocal_open.restype = ctypes.c_void_p
+    
+    _lib.firelocal_destroy.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_destroy.restype = None
+    
+    _lib.firelocal_load_rules.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.firelocal_load_rules.restype = ctypes.c_int
+    
+    _lib.firelocal_put_resource.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    _lib.firelocal_put_resource.restype = ctypes.c_int
+    
+    _lib.firelocal_get_resource.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.firelocal_get_resource.restype = ctypes.c_void_p
+    
+    _lib.firelocal_delete.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.firelocal_delete.restype = ctypes.c_int
+    
+    _lib.firelocal_free_string.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_free_string.restype = None
+    
+    _lib.firelocal_batch_new.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_batch_new.restype = ctypes.c_void_p
+    
+    _lib.firelocal_batch_set.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    _lib.firelocal_batch_set.restype = ctypes.c_int
+    
+    _lib.firelocal_batch_update.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    _lib.firelocal_batch_update.restype = ctypes.c_int
+    
+    _lib.firelocal_batch_delete.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+    _lib.firelocal_batch_delete.restype = ctypes.c_int
+    
+    _lib.firelocal_batch_commit.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+    _lib.firelocal_batch_commit.restype = ctypes.c_int
+    
+    _lib.firelocal_batch_free.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_batch_free.restype = None
+    
+    _lib.firelocal_compact.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_compact.restype = ctypes.c_void_p
+    
+    _lib.firelocal_flush.argtypes = [ctypes.c_void_p]
+    _lib.firelocal_flush.restype = ctypes.c_int
+    
+    _LIB_LOADED = True
+except (OSError, FileNotFoundError) as e:
+    _LIB_LOADED = False
+    _lib = None
+    print(f"Warning: Could not load FireLocal library: {e}")
 
 
 class FireLocal:
@@ -59,10 +112,18 @@ class FireLocal:
         Args:
             path: Directory path for database storage
         """
+        if not _LIB_LOADED:
+            raise RuntimeError("FireLocal library not loaded")
+            
         self.path = path
-        # Note: Actual FFI implementation would require C wrapper functions
-        # For now, this is a placeholder showing the intended API
-        self._handle = None
+        self._handle = _lib.firelocal_open(path.encode('utf-8'))
+        if not self._handle:
+            raise RuntimeError(f"Failed to open database at {path}")
+    
+    def load_rules(self, rules: str) -> None:
+        """Load security rules"""
+        if _lib.firelocal_load_rules(self._handle, rules.encode('utf-8')) != 0:
+            raise RuntimeError("Failed to load rules")
     
     def put(self, key: str, value: Dict[str, Any]) -> None:
         """
@@ -73,9 +134,13 @@ class FireLocal:
             value: Document data as dictionary
         """
         json_str = json.dumps(value)
-        # FFI call would go here
-        # _lib.firelocal_put(self._handle, key.encode(), json_str.encode())
-        pass
+        result = _lib.firelocal_put_resource(
+            self._handle,
+            key.encode('utf-8'),
+            json_str.encode('utf-8')
+        )
+        if result != 0:
+            raise RuntimeError(f"Failed to put document: {key}")
     
     def get(self, key: str) -> Optional[Dict[str, Any]]:
         """
@@ -87,11 +152,15 @@ class FireLocal:
         Returns:
             Document data or None if not found
         """
-        # FFI call would go here
-        # result = _lib.firelocal_get(self._handle, key.encode())
-        # if result:
-        #     return json.loads(result.decode())
-        return None
+        result_ptr = _lib.firelocal_get_resource(self._handle, key.encode('utf-8'))
+        if not result_ptr:
+            return None
+        
+        try:
+            json_str = ctypes.c_char_p(result_ptr).value.decode('utf-8')
+            return json.loads(json_str)
+        finally:
+            _lib.firelocal_free_string(result_ptr)
     
     def delete(self, key: str) -> None:
         """
@@ -100,9 +169,9 @@ class FireLocal:
         Args:
             key: Document path
         """
-        # FFI call would go here
-        # _lib.firelocal_delete(self._handle, key.encode())
-        pass
+        result = _lib.firelocal_delete(self._handle, key.encode('utf-8'))
+        if result != 0:
+            raise RuntimeError(f"Failed to delete document: {key}")
     
     def batch(self) -> 'WriteBatch':
         """
@@ -120,21 +189,45 @@ class FireLocal:
         Returns:
             CompactionStats with before/after metrics
         """
-        # FFI call would go here
-        return CompactionStats(
-            files_before=0,
-            files_after=0,
-            entries_before=0,
-            entries_after=0,
-            tombstones_removed=0,
-            size_before=0,
-            size_after=0,
-        )
+        result_ptr = _lib.firelocal_compact(self._handle)
+        if not result_ptr:
+            raise RuntimeError("Compaction failed")
+        
+        try:
+            json_str = ctypes.c_char_p(result_ptr).value.decode('utf-8')
+            data = json.loads(json_str)
+            return CompactionStats(
+                files_before=data['files_before'],
+                files_after=data['files_after'],
+                entries_before=data['entries_before'],
+                entries_after=data['entries_after'],
+                tombstones_removed=data['tombstones_removed'],
+                size_before=data['size_before'],
+                size_after=data['size_after'],
+            )
+        finally:
+            _lib.firelocal_free_string(result_ptr)
     
     def flush(self) -> None:
         """Flush memtable to SST file"""
-        # FFI call would go here
-        pass
+        result = _lib.firelocal_flush(self._handle)
+        if result != 0:
+            raise RuntimeError("Flush failed")
+    
+    def __enter__(self):
+        return self
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+    
+    def close(self):
+        """Close the database and free resources"""
+        if self._handle:
+            _lib.firelocal_destroy(self._handle)
+            self._handle = None
+    
+    def __del__(self):
+        self.close()
 
 
 class WriteBatch:
@@ -146,44 +239,56 @@ class WriteBatch:
         >>> batch.set("users/alice", {"name": "Alice"})
         >>> batch.set("users/bob", {"name": "Bob"})
         >>> batch.delete("users/charlie")
-        >>> db.commit_batch(batch)
+        >>> batch.commit()
     """
     
     def __init__(self, db: FireLocal):
         self.db = db
-        self.operations: List[Dict[str, Any]] = []
+        self._handle = _lib.firelocal_batch_new(db._handle)
+        if not self._handle:
+            raise RuntimeError("Failed to create batch")
     
     def set(self, path: str, data: Dict[str, Any]) -> 'WriteBatch':
         """Add a set operation to the batch"""
-        self.operations.append({
-            "type": "set",
-            "path": path,
-            "data": data,
-        })
+        json_str = json.dumps(data)
+        result = _lib.firelocal_batch_set(
+            self._handle,
+            path.encode('utf-8'),
+            json_str.encode('utf-8')
+        )
+        if result != 0:
+            raise RuntimeError(f"Failed to add set operation: {path}")
         return self
     
     def update(self, path: str, data: Dict[str, Any]) -> 'WriteBatch':
         """Add an update operation to the batch"""
-        self.operations.append({
-            "type": "update",
-            "path": path,
-            "data": data,
-        })
+        json_str = json.dumps(data)
+        result = _lib.firelocal_batch_update(
+            self._handle,
+            path.encode('utf-8'),
+            json_str.encode('utf-8')
+        )
+        if result != 0:
+            raise RuntimeError(f"Failed to add update operation: {path}")
         return self
     
     def delete(self, path: str) -> 'WriteBatch':
         """Add a delete operation to the batch"""
-        self.operations.append({
-            "type": "delete",
-            "path": path,
-        })
+        result = _lib.firelocal_batch_delete(self._handle, path.encode('utf-8'))
+        if result != 0:
+            raise RuntimeError(f"Failed to add delete operation: {path}")
         return self
     
     def commit(self) -> None:
         """Commit the batch atomically"""
-        # FFI call would go here
-        # _lib.firelocal_commit_batch(self.db._handle, ...)
-        pass
+        result = _lib.firelocal_batch_commit(self.db._handle, self._handle)
+        if result != 0:
+            raise RuntimeError("Failed to commit batch")
+    
+    def __del__(self):
+        if self._handle:
+            _lib.firelocal_batch_free(self._handle)
+            self._handle = None
 
 
 class CompactionStats:

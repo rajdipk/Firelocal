@@ -41,7 +41,8 @@ pub struct DocumentReference {
 
 impl DocumentReference {
     pub fn set(&self, data: Value) -> anyhow::Result<()> {
-        let mut db = self.db.lock().unwrap();
+        let mut db = self.db.lock()
+            .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         // Construct full document with path
         let doc = Document {
             path: self.path.clone(),
@@ -58,7 +59,13 @@ impl DocumentReference {
     }
 
     pub fn get(&self) -> Option<Document> {
-        let db = self.db.lock().unwrap();
+        let db = match self.db.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("Database lock poisoned, attempting recovery");
+                poisoned.into_inner()
+            }
+        };
         if let Some(bytes) = db.get(&self.path) {
             if let Ok(s) = std::str::from_utf8(&bytes) {
                 return Document::from_json(s).ok();
@@ -68,7 +75,8 @@ impl DocumentReference {
     }
 
     pub fn delete(&self) -> anyhow::Result<()> {
-        let mut db = self.db.lock().unwrap();
+        let mut db = self.db.lock()
+            .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         db.delete(self.path.clone())?;
         Ok(())
     }
@@ -81,7 +89,8 @@ pub struct Query {
 
 impl Query {
     pub fn get(&self) -> anyhow::Result<Vec<Document>> {
-        let db = self.db.lock().unwrap();
+        let db = self.db.lock()
+            .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         Ok(db.query(&self.ast)?)
     }
 
@@ -89,7 +98,13 @@ impl Query {
     where
         F: Fn(Vec<Document>) + Send + Sync + 'static,
     {
-        let mut db = self.db.lock().unwrap();
+        let mut db = match self.db.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => {
+                eprintln!("Database lock poisoned, attempting recovery");
+                poisoned.into_inner()
+            }
+        };
         db.listen(self.ast.clone(), Box::new(callback))
     }
 }

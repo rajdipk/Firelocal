@@ -56,6 +56,28 @@ impl FireLocal {
         }
     }
 
+    #[napi]
+    pub fn delete(&self, key: String) -> Result<()> {
+        let mut db = self
+            .inner
+            .lock()
+            .map_err(|_| Error::new(Status::GenericFailure, "Lock error".to_string()))?;
+
+        db.delete(key)
+            .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
+    }
+
+    #[napi]
+    pub fn flush(&self) -> Result<()> {
+        let mut db = self
+            .inner
+            .lock()
+            .map_err(|_| Error::new(Status::GenericFailure, "Lock error".to_string()))?;
+
+        db.flush()
+            .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
+    }
+
     /// Create a new write batch
     #[napi]
     pub fn batch(&self) -> Result<WriteBatch> {

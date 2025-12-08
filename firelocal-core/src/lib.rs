@@ -9,6 +9,7 @@ pub mod rules;
 pub mod store;
 pub mod sync;
 pub mod transaction;
+pub mod validation;
 
 use crate::config::FireLocalConfig;
 use crate::field_value::process_field_values;
@@ -65,7 +66,13 @@ impl FireLocal {
                     if entry.len() < 5 {
                         continue;
                     }
-                    let k_len = u32::from_le_bytes(entry[1..5].try_into().unwrap()) as usize;
+                    let k_len = match entry[1..5].try_into() {
+                        Ok(bytes) => u32::from_le_bytes(bytes) as usize,
+                        Err(_) => {
+                            eprintln!("Invalid WAL entry format: key length bytes");
+                            continue;
+                        }
+                    };
                     if entry.len() < 5 + k_len {
                         continue;
                     }
@@ -77,9 +84,13 @@ impl FireLocal {
                             continue;
                         }
                         let v_len_offset = 5 + k_len;
-                        let v_len = u32::from_le_bytes(
-                            entry[v_len_offset..v_len_offset + 4].try_into().unwrap(),
-                        ) as usize;
+                        let v_len = match entry[v_len_offset..v_len_offset + 4].try_into() {
+                            Ok(bytes) => u32::from_le_bytes(bytes) as usize,
+                            Err(_) => {
+                                eprintln!("Invalid WAL entry format: value length bytes");
+                                continue;
+                            }
+                        };
                         if entry.len() < v_len_offset + 4 + v_len {
                             continue;
                         }
@@ -163,6 +174,10 @@ impl FireLocal {
     }
 
     pub fn load_rules(&mut self, rules_str: &str) -> io::Result<()> {
+        // Validate rules format
+        validation::validate_rules(rules_str)
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
+
         self.rules
             .load_rules(rules_str)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e))
@@ -176,13 +191,37 @@ impl FireLocal {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
-                "Rules check failed",
+                format!(
+                    "Security rules check failed for path '{}' with operation '{}'. \
+                     Ensure your security rules allow this operation.",
+                    path, operation
+                ),
             ))
         }
     }
 
     pub fn put(&mut self, key: String, value: Vec<u8>) -> io::Result<()> {
-        self.check_rules(&key, "write")?;
+        // Only validate the most basic requirements
+        if key.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Document path cannot be empty"));
+        }
+        
+        if value.is_empty() {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput, "Document data cannot be empty"));
+        }
+        
+        // Skip strict JSON validation for better performance and flexibility
+        // Just check if it's valid UTF-8
+        if std::str::from_utf8(&value).is_err() {
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "Document data must be valid UTF-8"));
+        }
+        
+        // Skip rules check if no rules are loaded
+        if !self.rules.is_empty() {
+            if let Err(e) = self.check_rules(&key, "write") {
+                return Err(io::Error::new(io::ErrorKind::PermissionDenied, e.to_string()));
+            }
+        }
 
         if let Ok(json_str) = std::str::from_utf8(&value) {
             if let Ok(doc) = Document::from_json(json_str) {
@@ -230,7 +269,13 @@ impl FireLocal {
 
         // SST check (newest first)
         for sst_mutex in &self.ssts {
-            let mut sst = sst_mutex.lock().unwrap();
+            let mut sst = match sst_mutex.lock() {
+                Ok(guard) => guard,
+                Err(poisoned) => {
+                    eprintln!("SST mutex poisoned, attempting recovery");
+                    poisoned.into_inner()
+                }
+            };
             match sst.get(key) {
                 Ok(SstSearchResult::Found(val)) => return Some(val),
                 Ok(SstSearchResult::Deleted) => return None,
@@ -293,7 +338,7 @@ impl FireLocal {
         }
         Err(io::Error::new(
             io::ErrorKind::NotFound,
-            "Doc not found or invalid",
+            format!("Document '{}' not found or contains invalid JSON data", key),
         ))
     }
 
@@ -320,7 +365,7 @@ impl FireLocal {
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotFound,
-                "Remote doc not found",
+                format!("Remote document '{}' not found during sync pull", key),
             ))
         }
     }

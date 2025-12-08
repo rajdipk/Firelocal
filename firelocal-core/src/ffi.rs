@@ -94,3 +94,179 @@ pub extern "C" fn firelocal_free_string(s: *mut c_char) {
         }
     }
 }
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_delete(db: *mut FireLocal, key: *const c_char) -> i32 {
+    let db = unsafe {
+        if db.is_null() {
+            return -1;
+        }
+        &mut *db
+    };
+
+    let key_str = unsafe { CStr::from_ptr(key) }
+        .to_string_lossy()
+        .into_owned();
+
+    if db.delete(key_str).is_ok() {
+        return 0;
+    }
+    -1
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_new(db: *mut FireLocal) -> *mut crate::transaction::WriteBatch {
+    let db = unsafe {
+        if db.is_null() {
+            return std::ptr::null_mut();
+        }
+        &*db
+    };
+
+    let batch = db.batch();
+    Box::into_raw(Box::new(batch))
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_set(
+    batch: *mut crate::transaction::WriteBatch,
+    path: *const c_char,
+    data: *const c_char,
+) -> i32 {
+    let batch = unsafe {
+        if batch.is_null() {
+            return -1;
+        }
+        &mut *batch
+    };
+
+    let path_str = unsafe { CStr::from_ptr(path) }
+        .to_string_lossy()
+        .into_owned();
+    let data_bytes = unsafe { CStr::from_ptr(data) }.to_bytes().to_vec();
+
+    batch.set(path_str, data_bytes);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_update(
+    batch: *mut crate::transaction::WriteBatch,
+    path: *const c_char,
+    data: *const c_char,
+) -> i32 {
+    let batch = unsafe {
+        if batch.is_null() {
+            return -1;
+        }
+        &mut *batch
+    };
+
+    let path_str = unsafe { CStr::from_ptr(path) }
+        .to_string_lossy()
+        .into_owned();
+    let data_bytes = unsafe { CStr::from_ptr(data) }.to_bytes().to_vec();
+
+    batch.update(path_str, data_bytes);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_delete(
+    batch: *mut crate::transaction::WriteBatch,
+    path: *const c_char,
+) -> i32 {
+    let batch = unsafe {
+        if batch.is_null() {
+            return -1;
+        }
+        &mut *batch
+    };
+
+    let path_str = unsafe { CStr::from_ptr(path) }
+        .to_string_lossy()
+        .into_owned();
+
+    batch.delete(path_str);
+    0
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_commit(
+    db: *mut FireLocal,
+    batch: *mut crate::transaction::WriteBatch,
+) -> i32 {
+    let db = unsafe {
+        if db.is_null() {
+            return -1;
+        }
+        &mut *db
+    };
+
+    let batch = unsafe {
+        if batch.is_null() {
+            return -1;
+        }
+        &*batch
+    };
+
+    if db.commit_batch(batch).is_ok() {
+        return 0;
+    }
+    -1
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_batch_free(batch: *mut crate::transaction::WriteBatch) {
+    if !batch.is_null() {
+        unsafe {
+            drop(Box::from_raw(batch));
+        }
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
+    let db = unsafe {
+        if db.is_null() {
+            return std::ptr::null_mut();
+        }
+        &*db
+    };
+
+    match db.compact() {
+        Ok(stats) => {
+            // Return JSON string with stats
+            let json = format!(
+                r#"{{"files_before":{},"files_after":{},"entries_before":{},"entries_after":{},"tombstones_removed":{},"size_before":{},"size_after":{}}}"#,
+                stats.files_before,
+                stats.files_after,
+                stats.entries_before,
+                stats.entries_after,
+                stats.tombstones_removed,
+                stats.size_before,
+                stats.size_after
+            );
+            if let Ok(c_str) = CString::new(json) {
+                return c_str.into_raw();
+            }
+        }
+        Err(_) => {}
+    }
+    std::ptr::null_mut()
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn firelocal_flush(db: *mut FireLocal) -> i32 {
+    let db = unsafe {
+        if db.is_null() {
+            return -1;
+        }
+        &mut *db
+    };
+
+    if db.flush().is_ok() {
+        return 0;
+    }
+    -1
+}

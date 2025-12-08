@@ -24,8 +24,14 @@ impl ListenerManager {
     }
 
     pub fn register(&self, query: QueryAst, callback: SnapshotCallback) -> u64 {
-        let mut listeners = self.listeners.lock().unwrap();
-        let mut id_guard = self.next_id.lock().unwrap();
+        let mut listeners = match self.listeners.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        let mut id_guard = match self.next_id.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         let id = *id_guard;
         *id_guard += 1;
 
@@ -34,7 +40,10 @@ impl ListenerManager {
     }
 
     pub fn unregister(&self, id: u64) {
-        let mut listeners = self.listeners.lock().unwrap();
+        let mut listeners = match self.listeners.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         listeners.remove(&id);
     }
 
@@ -48,7 +57,10 @@ impl ListenerManager {
     // Structure: DB calls ListenerManager::notify_change(&self, db_instance)
 
     pub fn get_listeners(&self) -> Vec<(u64, QueryAst)> {
-        let listeners = self.listeners.lock().unwrap();
+        let listeners = match self.listeners.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         listeners
             .iter()
             .map(|(id, entry)| (*id, entry.query.clone()))
@@ -56,7 +68,10 @@ impl ListenerManager {
     }
 
     pub fn notify(&self, id: u64, docs: Vec<Document>) {
-        let listeners = self.listeners.lock().unwrap();
+        let listeners = match self.listeners.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
         if let Some(entry) = listeners.get(&id) {
             (entry.callback)(docs);
         }

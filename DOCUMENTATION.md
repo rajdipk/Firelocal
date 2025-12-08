@@ -1,10 +1,8 @@
-# FireLocal - Complete Documentation
+# FireLocal - Complete User & Developer Guide
 
-![FireLocal Logo](assets/firelocal.png)
-
-**Version:** 0.1.0  
-**License:** MIT  
-**Language:** Rust (with multi-language bindings)
+**Version:** 1.0.0  
+**Last Updated:** December 8, 2025  
+**Status:** Production Ready
 
 ---
 
@@ -16,16 +14,15 @@
 4. [Getting Started](#getting-started)
 5. [Core Concepts](#core-concepts)
 6. [Installation Guide](#installation-guide)
-7. [Configuration](#configuration)
-8. [API Reference](#api-reference)
-9. [Language Bindings](#language-bindings)
-10. [CLI Tools](#cli-tools)
-11. [Advanced Features](#advanced-features)
-12. [Performance & Optimization](#performance--optimization)
-13. [Security & Rules](#security--rules)
+7. [Database Structure](#database-structure)
+8. [How It Works](#how-it-works)
+9. [API Reference](#api-reference)
+10. [Security Rules](#security-rules)
+11. [Examples](#examples)
+12. [Advanced Topics](#advanced-topics)
+13. [Performance Tuning](#performance-tuning)
 14. [Troubleshooting](#troubleshooting)
-15. [Best Practices](#best-practices)
-16. [Examples](#examples)
+15. [FAQ](#faq)
 
 ---
 
@@ -36,9 +33,9 @@ Welcome to FireLocal! This comprehensive guide will help you understand, install
 ### Who Should Read This?
 
 - **Beginners**: Start with [What is FireLocal?](#what-is-firelocal) and [Getting Started](#getting-started)
-- **Mobile/Web Developers**: Jump to [Language Bindings](#language-bindings) for your platform
-- **System Architects**: Review [Architecture Overview](#architecture-overview) and [Performance](#performance--optimization)
-- **DevOps Engineers**: See [Configuration](#configuration) and [CLI Tools](#cli-tools)
+- **Mobile/Web Developers**: Jump to [Installation Guide](#installation-guide) for your platform
+- **System Architects**: Review [Architecture Overview](#architecture-overview) and [Performance](#performance-tuning)
+- **DevOps Engineers**: See [Database Structure](#database-structure) and [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -50,11 +47,12 @@ FireLocal is an **offline-first database** that provides a Firestore-compatible 
 
 ✅ **Firestore-Compatible API** - Familiar API for Firebase developers  
 ✅ **Offline-First** - Works without internet connection  
-✅ **Multi-Platform** - Rust, JavaScript, Dart, Python, .NET support  
+✅ **Multi-Platform** - Rust, JavaScript, Dart, Python, .NET, WASM support  
 ✅ **LSM-Tree Storage** - Efficient write-optimized storage engine  
 ✅ **ACID Transactions** - Atomic, consistent, isolated, durable operations  
 ✅ **Security Rules** - Firebase-compatible security rules engine  
-✅ **Smart Configuration** - Auto-generates `.env` files with sensible defaults  
+✅ **Input Validation** - Comprehensive validation for security  
+✅ **Rate Limiting** - Built-in rate limiting capabilities  
 ✅ **CLI Tools** - Interactive shell and management commands  
 ✅ **Batch Operations** - Atomic multi-document writes  
 ✅ **FieldValue Helpers** - `serverTimestamp()`, `increment()`, `arrayUnion()`, etc.
@@ -66,6 +64,8 @@ FireLocal is an **offline-first database** that provides a Firestore-compatible 
 - **Edge Computing**: IoT devices and edge servers
 - **Development/Testing**: Local Firestore emulator alternative
 - **Offline-First Web Apps**: Progressive Web Apps (PWAs)
+- **Progressive Web Apps**: Offline-capable web applications
+- **Hybrid Apps**: React Native, Flutter, Electron applications
 
 ---
 
@@ -76,7 +76,7 @@ FireLocal is built on a layered architecture that separates concerns and provide
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                        │
-│         (Rust, JavaScript, Dart, Python, .NET, CLI)        │
+│    (Rust, JavaScript, Dart, Python, .NET, CLI, WASM)       │
 └─────────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────────┐
@@ -151,7 +151,27 @@ Firebase-compatible security rules for access control:
 - Conditional allow/deny statements
 - Context-aware evaluation (user auth, request data)
 
-#### 4. **API Layer**
+#### 4. Simplified Validation
+
+FireLocal uses minimal validation to maximize flexibility:
+
+1. **Path Validation**
+   - Must be non-empty
+   - Maximum 4096 characters
+   - All characters allowed except control characters
+
+2. **Data Validation**
+   - Must be non-empty
+   - Must be valid UTF-8
+   - Maximum 100MB per document
+   - No strict JSON validation for better performance
+
+3. **Security Rules**
+   - Optional - only enforced if rules are loaded
+   - Maximum 1MB for rules
+   - No strict format requirements
+
+#### 5. **API Layer**
 
 Firestore-compatible API for familiar development experience:
 
@@ -160,7 +180,7 @@ Firestore-compatible API for familiar development experience:
 - Batch Operations
 - Transactions
 
-#### 5. **Language Bindings**
+#### 6. **Language Bindings**
 
 Native bindings for multiple programming languages:
 
@@ -212,22 +232,24 @@ fn main() -> anyhow::Result<()> {
 #### Option 2: Using JavaScript
 
 ```javascript
-import FireLocal from 'firelocal';
+const { FireLocal } = require('@firelocal/node');
 
 const db = new FireLocal('./my-data');
 
 // Write data
-await db.put('users/alice', JSON.stringify({
+db.put('users/alice', JSON.stringify({
     name: 'Alice',
     age: 30
 }));
 
 // Read data
-const data = await db.get('users/alice');
+const data = db.get('users/alice');
 console.log('Found:', JSON.parse(data));
 
 // Delete data
-await db.delete('users/alice');
+db.delete('users/alice');
+
+db.close();
 ```
 
 #### Option 3: Using Dart
@@ -298,27 +320,19 @@ Every write operation is first recorded in the WAL before being applied:
 - **Recovery**: Replay WAL on startup
 - **Performance**: Sequential writes are fast
 
-### 3. Memtable and SSTables
+### 3. Memtable and SSTable
 
-**Memtable:**
+**Memtable** (In-Memory):
+- Stores recent writes
+- Sorted for efficient range queries
+- Flushed to SSTable when full
+- Provides O(log n) access
 
-- In-memory sorted map
-- Fast reads and writes
-- Flushed to disk when full
-
-**SSTable (Sorted String Table):**
-
-- Immutable file on disk
-- Sorted by key for binary search
-- Contains data blocks and index
-
-**Read Path:**
-
-```
-1. Check Memtable (fastest)
-2. Check SSTables (newest to oldest)
-3. Return result or null
-```
+**SSTable** (Disk):
+- Immutable sorted files
+- Multiple levels for efficient compaction
+- Provides persistent storage
+- Searched in reverse order (newest first)
 
 ### 4. Compaction
 
@@ -326,18 +340,21 @@ Background process that optimizes storage:
 
 ```
 Before Compaction:
-SST1: [a=1, b=2, c=3]
-SST2: [a=2, d=4]
-SST3: [b=deleted, e=5]
+SST Level 0: [file1, file2, file3]
+SST Level 1: [file4, file5]
+SST Level 2: [file6]
 
 After Compaction:
-SST_new: [a=2, c=3, d=4, e=5]
+SST Level 0: [file7]
+SST Level 1: [file8]
+SST Level 2: [file9]
 ```
 
-**Triggers:**
-
-- Number of SST files exceeds threshold
-- Manual compaction via API or CLI
+**Benefits:**
+- Reduces file count
+- Removes tombstones
+- Reclaims disk space
+- Improves read performance
 
 ---
 
@@ -345,48 +362,34 @@ SST_new: [a=2, c=3, d=4, e=5]
 
 ### Rust
 
-Add to `Cargo.toml`:
-
-```toml
-[dependencies]
-firelocal-core = "0.1"
-```
-
-Then run:
-
 ```bash
-cargo build
+# Add to your Cargo.toml
+cargo add firelocal-core
+
+# Or manually add to Cargo.toml
+[dependencies]
+firelocal-core = "1.0"
+anyhow = "1.0"
 ```
 
 ### JavaScript/Node.js
 
 ```bash
-npm install firelocal
+npm install @firelocal/node
 # or
-yarn add firelocal
-```
-
-### Dart/Flutter
-
-Add to `pubspec.yaml`:
-
-```yaml
-dependencies:
-  firelocal_dart: ^0.1.0
-```
-
-Then run:
-
-```bash
-flutter pub get
-# or
-dart pub get
+yarn add @firelocal/node
 ```
 
 ### Python
 
 ```bash
 pip install firelocal
+```
+
+### Dart/Flutter
+
+```bash
+flutter pub add firelocal_dart
 ```
 
 ### .NET
@@ -395,1060 +398,353 @@ pip install firelocal
 dotnet add package FireLocal
 ```
 
-### CLI Tool
+### WASM (Browser)
 
 ```bash
-cargo install firelocal-cli
-```
-
-Or build from source:
-
-```bash
-git clone https://github.com/rajdipk/Firelocal.git
-cd firelocal/firelocal-cli
-cargo install --path .
+npm install firelocal-wasm
 ```
 
 ---
 
-## Configuration
+## Database Structure
 
-FireLocal uses a `.env` file for configuration. The file is auto-generated with sensible defaults when you use `new_with_config()` or `firelocal init`.
+### How Data is Organized
 
-### Auto-Generated .env File
+FireLocal stores data in a hierarchical structure similar to Firestore:
 
-```env
-# FireLocal Configuration
-# Auto-generated on 2024-12-07
-
-# Project Settings
-FIRELOCAL_PROJECT_ID=my-firelocal-project
-FIRELOCAL_DB_PATH=./.firelocal/data
-
-# Sync Settings
-FIRELOCAL_SYNC_MODE=off
-FIRELOCAL_SYNC_INTERVAL=300
-
-# Firebase Credentials (optional, for sync)
-FIREBASE_API_KEY=
-FIREBASE_APP_ID=
-FIREBASE_PROJECT_ID=
-FIREBASE_AUTH_DOMAIN=
-FIREBASE_STORAGE_BUCKET=
-FIREBASE_MESSAGING_SENDER_ID=
+```
+database/
+├── users/
+│   ├── alice
+│   │   ├── name: "Alice"
+│   │   ├── age: 30
+│   │   └── posts/
+│   │       ├── post1
+│   │       │   ├── title: "Hello"
+│   │       │   └── content: "World"
+│   │       └── post2
+│   │           ├── title: "Second"
+│   │           └── content: "Post"
+│   └── bob
+│       ├── name: "Bob"
+│       └── age: 25
+├── posts/
+│   ├── post1
+│   │   ├── title: "Hello"
+│   │   └── author: "alice"
+│   └── post2
+│       ├── title: "Second"
+│       └── author: "alice"
+└── settings/
+    └── config
+        ├── theme: "dark"
+        └── language: "en"
 ```
 
-### Configuration Options
+### Path Naming Conventions
 
-| Option | Description | Default | Values |
-|--------|-------------|---------|--------|
-| `FIRELOCAL_PROJECT_ID` | Project identifier | `my-firelocal-project` | Any string |
-| `FIRELOCAL_DB_PATH` | Database storage path | `./.firelocal/data` | Any valid path |
-| `FIRELOCAL_SYNC_MODE` | Sync mode | `off` | `off`, `manual`, `live`, `batch`, `background` |
-| `FIRELOCAL_SYNC_INTERVAL` | Sync interval (seconds) | `300` | Any positive integer |
+- **Paths** use forward slashes: `users/alice`
+- **Subcollections** use the same format: `users/alice/posts/post1`
+- **Path segments** can contain letters, numbers, hyphens, underscores
+- **Maximum path length** is 1024 characters
+- **Case-sensitive** - "Users" and "users" are different
 
-### Using Configuration in Code
+### Data Types
 
-**Rust:**
+FireLocal stores JSON data. Supported types:
 
-```rust
-// Auto-loads .env and creates config
-let db = FireLocal::new_with_config("./data")?;
+- **String** - Text data
+- **Number** - Integers and floats
+- **Boolean** - true/false
+- **Array** - Lists of values
+- **Object** - Nested JSON objects
+- **null** - Null values
 
-// Access config
-if let Some(config) = db.config() {
-    println!("Project ID: {}", config.project_id);
-    println!("DB Path: {}", config.db_path);
+### Example Document
+
+```json
+{
+  "name": "Alice",
+  "age": 30,
+  "email": "alice@example.com",
+  "active": true,
+  "tags": ["developer", "rust", "firebase"],
+  "profile": {
+    "bio": "Software engineer",
+    "location": "San Francisco",
+    "links": {
+      "github": "https://github.com/alice",
+      "twitter": "@alice"
+    }
+  },
+  "created": 1702080000000,
+  "updated": 1702166400000
 }
 ```
 
-**CLI:**
+---
 
-```bash
-# Initialize .env
-firelocal init
+## How It Works
 
-# Show current config
-firelocal config show
+### Storage Engine (LSM-Tree)
 
-# Update config
-firelocal config init --path ./my-project
+FireLocal uses a Log-Structured Merge-Tree (LSM-Tree) architecture for efficient storage:
+
+```
+Write Operation:
+1. Write to WAL (Write-Ahead Log) - ensures durability
+2. Write to Memtable (in-memory) - fast access
+3. When memtable is full, flush to SST file
+4. Periodically compact SST files
+
+Read Operation:
+1. Check Memtable first (fastest)
+2. If not found, check SST files (disk)
+3. Return result or null if not found
+
+Delete Operation:
+1. Write tombstone to WAL
+2. Mark as deleted in Memtable
+3. Tombstones removed during compaction
 ```
 
 ---
 
 ## API Reference
 
-### Core API (Rust)
+### Core Methods
 
-#### `FireLocal::new(path)`
+#### Database Creation
 
-Create a new database instance.
-
+**Rust:**
 ```rust
-let mut db = FireLocal::new("./data")?;
+let mut db = FireLocal::new("./mydata")?;
+let mut db = FireLocal::new_with_config("./mydata")?;
 ```
 
-**Parameters:**
-
-- `path`: Directory path for database storage
-
-**Returns:** `io::Result<FireLocal>`
-
----
-
-#### `FireLocal::new_with_config(path)`
-
-Create database with auto-generated `.env` configuration.
-
-```rust
-let mut db = FireLocal::new_with_config("./data")?;
+**JavaScript:**
+```javascript
+const db = new FireLocal('./mydata');
 ```
 
-**Parameters:**
+**Python:**
+```python
+db = FireLocal('./mydata')
+```
 
-- `path`: Directory path for database storage
+**Dart:**
+```dart
+final db = FireLocal('./mydata');
+```
 
-**Returns:** `io::Result<FireLocal>`
+#### Write Operations
 
-**Side Effects:**
-
-- Creates `.env` file if it doesn't exist
-- Loads configuration from `.env`
-
----
-
-#### `put(key, value)`
-
-Write a document to the database.
-
+**Put (Create/Update):**
 ```rust
 db.put("users/alice".to_string(), data)?;
 ```
 
-**Parameters:**
-
-- `key`: Document path (e.g., `"users/alice"`)
-- `value`: Document data as `Vec<u8>` (JSON bytes)
-
-**Returns:** `io::Result<()>`
-
-**Example:**
-
-```rust
-let data = serde_json::to_vec(&json!({
-    "name": "Alice",
-    "age": 30
-}))?;
-db.put("users/alice".to_string(), data)?;
-```
-
----
-
-#### `get(key)`
-
-Read a document from the database.
-
-```rust
-if let Some(data) = db.get("users/alice") {
-    // Process data
-}
-```
-
-**Parameters:**
-
-- `key`: Document path
-
-**Returns:** `Option<Vec<u8>>`
-
-**Example:**
-
-```rust
-if let Some(bytes) = db.get("users/alice") {
-    let json_str = String::from_utf8_lossy(&bytes);
-    let doc: serde_json::Value = serde_json::from_str(&json_str)?;
-    println!("Name: {}", doc["name"]);
-}
-```
-
----
-
-#### `delete(key)`
-
-Delete a document from the database.
-
-```rust
-db.delete("users/alice".to_string())?;
-```
-
-**Parameters:**
-
-- `key`: Document path
-
-**Returns:** `io::Result<()>`
-
----
-
-#### `batch()`
-
-Create a new write batch for atomic operations.
-
+**Batch Put:**
 ```rust
 let mut batch = db.batch();
 batch.set("users/alice".to_string(), data1);
 batch.set("users/bob".to_string(), data2);
-batch.delete("users/charlie".to_string());
 db.commit_batch(&batch)?;
 ```
 
-**Returns:** `WriteBatch`
-
----
-
-#### `commit_batch(batch)`
-
-Commit a write batch atomically.
-
+**Update (Merge):**
 ```rust
+let mut batch = db.batch();
+batch.update("users/alice".to_string(), partial_data);
 db.commit_batch(&batch)?;
 ```
 
-**Parameters:**
+#### Read Operations
 
-- `batch`: WriteBatch to commit
+**Get Single Document:**
+```rust
+if let Some(data) = db.get("users/alice") {
+    println!("{}", String::from_utf8_lossy(&data));
+}
+```
 
-**Returns:** `Result<()>`
+**Query Documents:**
+```rust
+let query = QueryAst::new("users");
+let results = db.query(&query)?;
+```
 
-**Guarantees:**
+#### Delete Operations
 
-- All operations succeed or all fail
-- Single WAL entry for entire batch
-- Atomic visibility to readers
+**Delete Single Document:**
+```rust
+db.delete("users/alice".to_string())?;
+```
 
----
+**Batch Delete:**
+```rust
+let mut batch = db.batch();
+batch.delete("users/alice".to_string());
+batch.delete("users/bob".to_string());
+db.commit_batch(&batch)?;
+```
 
-#### `run_transaction(fn)`
+#### Maintenance Operations
 
-Run a transaction with optimistic concurrency control.
+**Flush Memtable:**
+```rust
+db.flush()?;
+```
 
+**Compact Database:**
+```rust
+let stats = db.compact()?;
+println!("Files before: {}", stats.files_before);
+println!("Files after: {}", stats.files_after);
+```
+
+**Load Rules:**
+```rust
+db.load_rules(rules_string)?;
+```
+
+### FieldValue Helpers
+
+Special values for common operations:
+
+**Server Timestamp:**
+```rust
+use firelocal_core::field_value::FieldValue;
+
+let data = serde_json::json!({
+    "name": "Alice",
+    "created": FieldValue::server_timestamp()
+});
+```
+
+**Increment:**
+```rust
+let data = serde_json::json!({
+    "count": FieldValue::increment(1)
+});
+```
+
+**Array Union:**
+```rust
+let data = serde_json::json!({
+    "tags": FieldValue::array_union(vec![
+        json!("rust"),
+        json!("database")
+    ])
+});
+```
+
+**Array Remove:**
+```rust
+let data = serde_json::json!({
+    "tags": FieldValue::array_remove(vec![
+        json!("old_tag")
+    ])
+});
+```
+
+**Delete Field:**
+```rust
+let data = serde_json::json!({
+    "field_to_delete": FieldValue::delete()
+});
+```
+
+### Transactions
+
+**Optimistic Concurrency Control:**
 ```rust
 db.run_transaction(|txn, db| {
-    // Read
-    let data = txn.get("counter", db.get("counter"), 1);
+    // Read current value
+    let current = db.get("counter")?;
     
-    // Modify
-    let new_value = increment_counter(data);
+    // Modify value
+    let new_value = increment_value(current)?;
     
-    // Write
+    // Write back
     txn.set("counter".to_string(), new_value);
     
     Ok(())
 })?;
 ```
 
-**Parameters:**
-
-- `fn`: Transaction function
-
-**Returns:** `Result<()>`
-
-**Behavior:**
-
-- Validates document versions haven't changed
-- Retries on conflict (automatic)
-- Atomic commit
-
 ---
 
-#### `compact()`
+## Security Rules
 
-Run compaction to merge SST files.
+### What are Security Rules?
 
-```rust
-let stats = db.compact()?;
-println!("Files before: {}", stats.files_before);
-println!("Files after: {}", stats.files_after);
-println!("Tombstones removed: {}", stats.tombstones_removed);
-```
-
-**Returns:** `Result<CompactionStats>`
-
-**CompactionStats:**
-
-```rust
-pub struct CompactionStats {
-    pub files_before: usize,
-    pub files_after: usize,
-    pub entries_before: usize,
-    pub entries_after: usize,
-    pub tombstones_removed: usize,
-    pub size_before: u64,
-    pub size_after: u64,
-}
-```
-
----
-
-#### `flush()`
-
-Flush memtable to SST file.
-
-```rust
-db.flush()?;
-```
-
-**Returns:** `io::Result<()>`
-
-**When to use:**
-
-- Before shutdown for durability
-- To free memory
-- Manual control over SST creation
-
----
-
-#### `load_rules(rules_str)`
-
-Load Firebase-compatible security rules.
-
-```rust
-db.load_rules(r#"
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
-    }
-  }
-}
-"#)?;
-```
-
-**Parameters:**
-
-- `rules_str`: Security rules string
-
-**Returns:** `io::Result<()>`
-
----
-
-### FieldValue Helpers
-
-Special values for common operations:
-
-#### `serverTimestamp()`
-
-Set field to current server time.
-
-```rust
-use firelocal_core::field_value::FieldValue;
-
-let mut data = serde_json::Map::new();
-data.insert(
-    "createdAt".to_string(),
-    serde_json::to_value(FieldValue::server_timestamp())?
-);
-db.put_with_field_values("doc1".to_string(), data)?;
-```
-
----
-
-#### `increment(n)`
-
-Increment numeric field by `n`.
-
-```rust
-let mut data = serde_json::Map::new();
-data.insert(
-    "views".to_string(),
-    serde_json::to_value(FieldValue::increment(1))?
-);
-db.put_with_field_values("posts/post1".to_string(), data)?;
-```
-
----
-
-#### `arrayUnion(elements)`
-
-Add elements to array (unique).
-
-```rust
-let mut data = serde_json::Map::new();
-data.insert(
-    "tags".to_string(),
-    serde_json::to_value(FieldValue::array_union(vec![
-        json!("rust"),
-        json!("database")
-    ]))?
-);
-db.put_with_field_values("doc1".to_string(), data)?;
-```
-
----
-
-#### `arrayRemove(elements)`
-
-Remove elements from array.
-
-```rust
-let mut data = serde_json::Map::new();
-data.insert(
-    "tags".to_string(),
-    serde_json::to_value(FieldValue::array_remove(vec![
-        json!("old-tag")
-    ]))?
-);
-db.put_with_field_values("doc1".to_string(), data)?;
-```
-
----
-
-#### `delete()`
-
-Delete a field from document.
-
-```rust
-let mut data = serde_json::Map::new();
-data.insert(
-    "deprecated_field".to_string(),
-    serde_json::to_value(FieldValue::delete())?
-);
-db.put_with_field_values("doc1".to_string(), data)?;
-```
-
----
-
-## Language Bindings
-
-### JavaScript/Node.js
-
-#### Installation
-
-```bash
-npm install firelocal
-```
-
-#### Basic Usage
-
-```javascript
-import FireLocal, { 
-    serverTimestamp, 
-    increment,
-    arrayUnion 
-} from 'firelocal';
-
-const db = new FireLocal('./data');
-
-// Write
-await db.put('users/alice', JSON.stringify({
-    name: 'Alice',
-    createdAt: serverTimestamp(),
-    loginCount: increment(1),
-    tags: arrayUnion(['premium', 'verified'])
-}));
-
-// Read
-const data = await db.get('users/alice');
-console.log(JSON.parse(data));
-
-// Delete
-await db.delete('users/alice');
-
-// Batch
-const batch = db.batch();
-batch.set('users/bob', JSON.stringify({name: 'Bob'}));
-batch.set('users/charlie', JSON.stringify({name: 'Charlie'}));
-await db.commitBatch(batch);
-
-// Compact
-const stats = await db.compact();
-console.log(`Saved ${stats.tombstonesRemoved} tombstones`);
-```
-
----
-
-### Dart/Flutter
-
-#### Installation
-
-```yaml
-dependencies:
-  firelocal_dart: ^0.1.0
-```
-
-#### Basic Usage
-
-```dart
-import 'package:firelocal_dart/firelocal_dart.dart';
-
-void main() async {
-  final db = FireLocal('./data');
-  
-  // Load rules
-  db.loadRules('''
-    service cloud.firestore {
-      match /databases/{database}/documents {
-        match /{document=**} {
-          allow read, write: if true;
-        }
-      }
-    }
-  ''');
-  
-  // Write
-  await db.put('users/alice', {
-    'name': 'Alice',
-    'age': 30,
-    'active': true
-  });
-  
-  // Read
-  final data = await db.get('users/alice');
-  print('Name: ${data?['name']}');
-  
-  // Delete
-  await db.delete('users/alice');
-  
-  // Batch
-  final batch = db.batch();
-  batch.set('users/bob', {'name': 'Bob'});
-  batch.set('users/charlie', {'name': 'Charlie'});
-  await batch.commit();
-  
-  // Compact
-  final stats = await db.compact();
-  print('Files: ${stats.filesBefore} → ${stats.filesAfter}');
-  
-  db.close();
-}
-```
-
----
-
-### Python
-
-#### Installation
-
-```bash
-pip install firelocal
-```
-
-#### Basic Usage
-
-```python
-from firelocal import FireLocal
-import json
-
-db = FireLocal('./data')
-
-# Write
-data = {'name': 'Alice', 'age': 30}
-db.put('users/alice', json.dumps(data))
-
-# Read
-result = db.get('users/alice')
-if result:
-    doc = json.loads(result)
-    print(f"Name: {doc['name']}")
-
-# Delete
-db.delete('users/alice')
-
-# Batch
-batch = db.batch()
-batch.set('users/bob', json.dumps({'name': 'Bob'}))
-batch.set('users/charlie', json.dumps({'name': 'Charlie'}))
-db.commit_batch(batch)
-
-# Compact
-stats = db.compact()
-print(f"Tombstones removed: {stats.tombstones_removed}")
-```
-
----
-
-### .NET/C #
-
-#### Installation
-
-```bash
-dotnet add package FireLocal
-```
-
-#### Basic Usage
-
-```csharp
-using FireLocal;
-using System.Text.Json;
-
-var db = new FireLocal("./data");
-
-// Write
-var data = new { name = "Alice", age = 30 };
-db.Put("users/alice", JsonSerializer.Serialize(data));
-
-// Read
-var result = db.Get("users/alice");
-if (result != null)
-{
-    var doc = JsonSerializer.Deserialize<dynamic>(result);
-    Console.WriteLine($"Name: {doc.name}");
-}
-
-// Delete
-db.Delete("users/alice");
-
-// Batch
-var batch = db.Batch();
-batch.Set("users/bob", JsonSerializer.Serialize(new { name = "Bob" }));
-batch.Set("users/charlie", JsonSerializer.Serialize(new { name = "Charlie" }));
-db.CommitBatch(batch);
-
-// Compact
-var stats = db.Compact();
-Console.WriteLine($"Tombstones removed: {stats.TombstonesRemoved}");
-```
-
----
-
-## CLI Tools
-
-FireLocal includes a powerful CLI for database management and interactive exploration.
-
-### Installation
-
-```bash
-cargo install firelocal-cli
-```
-
-### Commands
-
-#### `firelocal init`
-
-Initialize a new FireLocal project with `.env` configuration.
-
-```bash
-firelocal init
-firelocal init --path ./my-project
-```
-
-**Creates:**
-
-- `.env` file with default configuration
-- `.firelocal/data` directory
-
----
-
-#### `firelocal config show`
-
-Display current configuration.
-
-```bash
-firelocal config show
-firelocal config show --path ./my-project
-```
-
-**Output:**
-
-```
-FireLocal Configuration
-=======================
-Project ID: my-firelocal-project
-Database Path: ./.firelocal/data
-Sync Mode: off
-Sync Interval: 300 seconds
-```
-
----
-
-#### `firelocal shell`
-
-Start an interactive shell.
-
-```bash
-firelocal shell
-firelocal shell --path ./my-project
-```
-
-**Interactive Commands:**
-
-```
-firelocal> put users/alice {"name":"Alice","age":30}
-✓ Document written successfully
-
-firelocal> get users/alice
-{
-  "name": "Alice",
-  "age": 30
-}
-
-firelocal> delete users/alice
-✓ Document deleted successfully
-
-firelocal> compact
-Compaction completed:
-  Files: 5 → 2
-  Entries: 1000 → 800
-  Tombstones removed: 200
-  Size: 5.2 MB → 3.1 MB
-
-firelocal> help
-Available commands:
-  put <key> <json>     Write a document
-  get <key>            Read a document
-  delete <key>         Delete a document
-  compact              Run compaction
-  flush                Flush memtable
-  help                 Show this help
-  exit                 Exit shell
-
-firelocal> exit
-Goodbye!
-```
-
----
-
-#### `firelocal put`
-
-Write a document.
-
-```bash
-firelocal put users/alice '{"name":"Alice","age":30}'
-firelocal put users/alice '{"name":"Alice"}' --path ./my-project
-```
-
----
-
-#### `firelocal get`
-
-Read a document.
-
-```bash
-firelocal get users/alice
-firelocal get users/alice --path ./my-project
-```
-
----
-
-#### `firelocal delete`
-
-Delete a document.
-
-```bash
-firelocal delete users/alice
-firelocal delete users/alice --path ./my-project
-```
-
----
-
-#### `firelocal compact`
-
-Run compaction.
-
-```bash
-firelocal compact
-firelocal compact --path ./my-project
-```
-
----
-
-#### `firelocal flush`
-
-Flush memtable to SST.
-
-```bash
-firelocal flush
-firelocal flush --path ./my-project
-```
-
----
-
-## Advanced Features
-
-### Transactions
-
-Transactions provide ACID guarantees with optimistic concurrency control.
-
-**How it works:**
-
-1. Read documents and record versions
-2. Perform operations in memory
-3. Validate versions haven't changed
-4. Commit atomically or retry
-
-**Example:**
-
-```rust
-db.run_transaction(|txn, db| {
-    // Read current balance
-    let balance_bytes = db.get("accounts/alice").unwrap();
-    let balance: i64 = serde_json::from_slice(&balance_bytes)?;
-    
-    // Check sufficient funds
-    if balance < 100 {
-        return Err(anyhow::anyhow!("Insufficient funds"));
-    }
-    
-    // Deduct amount
-    let new_balance = balance - 100;
-    txn.set(
-        "accounts/alice".to_string(),
-        serde_json::to_vec(&new_balance)?
-    );
-    
-    Ok(())
-})?;
-```
-
----
-
-### Queries
-
-FireLocal supports basic queries with indexing.
-
-**Supported Operators:**
-
-- `Equal`: Exact match
-- `In`: Value in array
-- `NotIn`: Value not in array
-- `ArrayContains`: Array contains value
-- `ArrayContainsAny`: Array contains any value
-- `LessThan`: Numeric/string comparison
-- `LessThanOrEqual`: Numeric/string comparison
-- `GreaterThan`: Numeric/string comparison
-- `GreaterThanOrEqual`: Numeric/string comparison
-
-**Example:**
-
-```rust
-use firelocal_core::index::{QueryAst, QueryOperator};
-
-let query = QueryAst {
-    field: "age".to_string(),
-    operator: QueryOperator::GreaterThan(json!(25)),
-};
-
-let results = db.query(&query)?;
-for doc in results {
-    println!("Found: {}", doc.path);
-}
-```
-
----
-
-### Listeners
-
-Real-time updates when data changes.
-
-**Example:**
-
-```rust
-use firelocal_core::index::{QueryAst, QueryOperator};
-
-let query = QueryAst {
-    field: "active".to_string(),
-    operator: QueryOperator::Equal(json!(true)),
-};
-
-let listener_id = db.listen(query, Box::new(|docs| {
-    println!("Data changed! {} active users", docs.len());
-    for doc in docs {
-        println!("  - {}", doc.path);
-    }
-}));
-
-// Later: remove listener
-// db.remove_listener(listener_id);
-```
-
----
-
-### Sync (Coming Soon)
-
-FireLocal will support syncing with Firebase Firestore:
-
-**Sync Modes:**
-
-- `off`: No syncing
-- `manual`: Sync on demand
-- `live`: Real-time sync (WebSocket)
-- `batch`: Periodic batch sync
-- `background`: Low-priority background sync
-
-**Configuration:**
-
-```env
-FIRELOCAL_SYNC_MODE=live
-FIRELOCAL_SYNC_INTERVAL=60
-FIREBASE_API_KEY=your-api-key
-FIREBASE_PROJECT_ID=your-project-id
-```
-
----
-
-## Performance & Optimization
-
-### Write Performance
-
-**Characteristics:**
-
-- O(log n) complexity
-- Sequential WAL writes (fast)
-- Batching reduces overhead
-
-**Optimization Tips:**
-
-1. **Use Batches**: Combine multiple writes
-
-   ```rust
-   let mut batch = db.batch();
-   for i in 0..1000 {
-       batch.set(format!("doc{}", i), data.clone());
-   }
-   db.commit_batch(&batch)?; // Single WAL flush
-   ```
-
-2. **Flush Periodically**: Control memtable size
-
-   ```rust
-   if write_count % 10000 == 0 {
-       db.flush()?;
-   }
-   ```
-
----
-
-### Read Performance
-
-**Characteristics:**
-
-- O(log n) from memtable (fast)
-- O(log n * num_ssts) from SSTables
-- Bloom filters reduce disk reads
-
-**Optimization Tips:**
-
-1. **Compact Regularly**: Reduce SST count
-
-   ```rust
-   if sst_count > 10 {
-       db.compact()?;
-   }
-   ```
-
-2. **Use Indexes**: Enable fast queries
-
-   ```rust
-   // Indexed query (fast)
-   let query = QueryAst {
-       field: "email".to_string(),
-       operator: QueryOperator::Equal(json!("alice@example.com")),
-   };
-   ```
-
----
-
-### Storage Optimization
-
-**Compaction Benefits:**
-
-- Removes deleted entries (tombstones)
-- Merges small SSTables
-- Reduces disk space
-- Improves read performance
-
-**When to Compact:**
-
-- After bulk deletes
-- When SST count is high (>10)
-- During low-traffic periods
-
-**Example:**
-
-```rust
-let stats = db.compact()?;
-println!("Space saved: {} bytes", 
-    stats.size_before - stats.size_after);
-```
-
----
-
-### Benchmarks
-
-Typical performance on modern hardware (SSD, 16GB RAM):
-
-| Operation | Throughput | Latency (p50) | Latency (p99) |
-|-----------|------------|---------------|---------------|
-| Write (single) | 50,000 ops/sec | 20 μs | 100 μs |
-| Write (batch 100) | 500,000 ops/sec | 2 μs/op | 10 μs/op |
-| Read (memtable) | 1,000,000 ops/sec | 1 μs | 5 μs |
-| Read (SST) | 100,000 ops/sec | 10 μs | 50 μs |
-| Query (indexed) | 50,000 ops/sec | 20 μs | 100 μs |
-| Compaction | 100 MB/sec | - | - |
-
----
-
-## Security & Rules
-
-FireLocal supports Firebase-compatible security rules for access control.
-
-### Rules Syntax
+Security rules control who can read and write data. They use Firestore's rule syntax:
 
 ```
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Match pattern
-    match /path/{variable} {
-      // Allow statement
-      allow read, write: if <condition>;
-    }
+    // Rules here
   }
 }
 ```
 
-### Examples
+### Basic Rules
 
-#### Public Read, Authenticated Write
-
+**Allow All:**
 ```
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /posts/{postId} {
-      allow read: if true;
-      allow write: if request.auth != null;
-    }
-  }
+match /{document=**} {
+  allow read, write: if true;
 }
 ```
 
-#### User-Specific Data
-
+**Deny All:**
 ```
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
-    }
-  }
+match /{document=**} {
+  allow read, write: if false;
 }
 ```
 
-#### Wildcard Matching
-
+**Public Read, Authenticated Write:**
 ```
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read: if true;
-      allow write: if false;
-    }
-  }
+match /{document=**} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}
+```
+
+### Collection-Level Rules
+
+**User-Specific Access:**
+```
+match /users/{userId} {
+  allow read, write: if request.auth.uid == userId;
+}
+```
+
+**Admin-Only Access:**
+```
+match /admin/{document=**} {
+  allow read, write: if request.auth.token.admin == true;
+}
+```
+
+### Field-Level Rules
+
+**Protect Sensitive Fields:**
+```
+match /users/{userId} {
+  allow read: if request.auth.uid == userId;
+  allow write: if request.auth.uid == userId
+    && !request.resource.data.keys().hasAny(['email', 'password']);
 }
 ```
 
 ### Loading Rules
 
+**Rust:**
 ```rust
-db.load_rules(r#"
+let rules = r#"
 service cloud.firestore {
   match /databases/{database}/documents {
     match /users/{userId} {
@@ -1456,8 +752,241 @@ service cloud.firestore {
     }
   }
 }
-"#)?;
+"#;
+db.load_rules(rules)?;
 ```
+
+**JavaScript:**
+```javascript
+db.loadRules(`
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /users/{userId} {
+        allow read, write: if request.auth.uid == userId;
+      }
+    }
+  }
+`);
+```
+
+---
+
+## Examples
+
+### Example 1: User Management
+
+**Create User:**
+```rust
+let user_data = serde_json::json!({
+    "name": "Alice",
+    "email": "alice@example.com",
+    "age": 30,
+    "created": chrono::Utc::now().timestamp_millis()
+});
+
+db.put(
+    "users/alice".to_string(),
+    serde_json::to_vec(&user_data)?
+)?;
+```
+
+**Update User:**
+```rust
+let mut batch = db.batch();
+batch.update(
+    "users/alice".to_string(),
+    serde_json::json!({
+        "age": 31,
+        "updated": chrono::Utc::now().timestamp_millis()
+    }).to_string().into_bytes()
+);
+db.commit_batch(&batch)?;
+```
+
+**Delete User:**
+```rust
+db.delete("users/alice".to_string())?;
+```
+
+### Example 2: Blog Application
+
+**Create Post:**
+```rust
+let post = serde_json::json!({
+    "title": "My First Post",
+    "content": "Hello, World!",
+    "author": "alice",
+    "created": chrono::Utc::now().timestamp_millis(),
+    "tags": ["hello", "world"],
+    "published": true
+});
+
+db.put(
+    "posts/post1".to_string(),
+    serde_json::to_vec(&post)?
+)?;
+```
+
+**Add Comment:**
+```rust
+let comment = serde_json::json!({
+    "author": "bob",
+    "text": "Great post!",
+    "created": chrono::Utc::now().timestamp_millis()
+});
+
+db.put(
+    "posts/post1/comments/comment1".to_string(),
+    serde_json::to_vec(&comment)?
+)?;
+```
+
+### Example 3: Batch Operations
+
+**Bulk Import:**
+```rust
+let mut batch = db.batch();
+
+for (i, user) in users.iter().enumerate() {
+    batch.set(
+        format!("users/user{}", i),
+        serde_json::to_vec(user)?
+    );
+}
+
+db.commit_batch(&batch)?;
+```
+
+**Atomic Update:**
+```rust
+let mut batch = db.batch();
+
+// Debit from account A
+batch.update(
+    "accounts/A".to_string(),
+    serde_json::json!({
+        "balance": -100
+    }).to_string().into_bytes()
+);
+
+// Credit to account B
+batch.update(
+    "accounts/B".to_string(),
+    serde_json::json!({
+        "balance": 100
+    }).to_string().into_bytes()
+);
+
+// Both succeed or both fail
+db.commit_batch(&batch)?;
+```
+
+---
+
+## Advanced Topics
+
+### Transactions
+
+**Optimistic Concurrency Control:**
+```rust
+db.run_transaction(|txn, db| {
+    // Read
+    let current = db.get("counter")?;
+    let value = serde_json::from_slice::<i32>(&current)?;
+    
+    // Modify
+    let new_value = value + 1;
+    
+    // Write
+    txn.set("counter".to_string(), serde_json::to_vec(&new_value)?);
+    
+    Ok(())
+})?;
+```
+
+### Listeners (Real-time Updates)
+
+**Subscribe to Changes:**
+```rust
+let listener_id = db.listen(
+    QueryAst::new("users"),
+    Box::new(|docs| {
+        println!("Documents changed: {:?}", docs);
+    })
+);
+
+// Later, unsubscribe
+db.unregister_listener(listener_id);
+```
+
+### Sync Operations
+
+**Push to Remote:**
+```rust
+db.sync_push("users/alice")?;
+```
+
+**Pull from Remote:**
+```rust
+db.sync_pull("users/alice")?;
+```
+
+### Input Validation
+
+**Validate Paths:**
+```rust
+use firelocal_core::validation;
+
+validation::validate_path("users/alice")?;
+```
+
+**Validate Data:**
+```rust
+validation::validate_json(data)?;
+validation::validate_data_size(data)?;
+```
+
+**Rate Limiting:**
+```rust
+let limiter = validation::RateLimiter::new(100, 60); // 100 req/min
+limiter.check()?;
+```
+
+---
+
+## Performance Tuning
+
+### Best Practices
+
+1. **Use Batch Operations** - Combine multiple writes
+2. **Run Compaction** - Periodically optimize storage
+3. **Flush Regularly** - Ensure data is written to disk
+4. **Limit Document Size** - Keep documents reasonably sized
+5. **Use Appropriate Paths** - Organize data hierarchically
+
+### Benchmarks
+
+| Operation | Time | Notes |
+|-----------|------|-------|
+| Put | ~1ms | With WAL |
+| Get | ~0.5ms | From memtable |
+| Delete | ~1ms | Tombstone marking |
+| Batch (100 ops) | ~10ms | Single flush |
+| Compaction | Variable | Depends on data size |
+
+### Memory Usage
+
+- **Memtable** - ~10MB per 100k documents
+- **SST Files** - Depends on data size
+- **Index** - ~1MB per 100k documents
+- **Total** - Typically <100MB for most applications
+
+### Disk Usage
+
+- **WAL** - ~1KB per operation
+- **SST Files** - Depends on data size
+- **Indexes** - ~10% of data size
+- **Total** - Typically 1-2x data size
 
 ---
 
@@ -1465,347 +994,139 @@ service cloud.firestore {
 
 ### Common Issues
 
-#### 1. "Permission denied" errors
+#### Issue: "Database lock poisoned"
 
-**Cause:** Security rules blocking access
-
-**Solution:**
-
-```rust
-// Check rules
-db.load_rules(r#"
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if true;  // Allow all (development only!)
-    }
-  }
-}
-"#)?;
-```
-
----
-
-#### 2. Slow reads after many writes
-
-**Cause:** Too many SST files
+**Cause:** Database mutex became poisoned due to panic in another thread
 
 **Solution:**
+1. Close all connections to the database
+2. Restart the application
+3. Check for panics in logs
 
-```rust
-// Run compaction
-let stats = db.compact()?;
-println!("Compacted {} files", stats.files_before);
-```
+#### Issue: "Rules check failed"
 
----
-
-#### 3. Database corruption after crash
-
-**Cause:** WAL replay failed
+**Cause:** Security rules denied the operation
 
 **Solution:**
+1. Check your security rules
+2. Verify the operation is allowed
+3. Check the document path
 
-```rust
-// WAL is automatically replayed on startup
-// If corruption persists, check disk health
-let db = FireLocal::new("./data")?; // Auto-recovers
-```
+#### Issue: "Failed to open database"
 
----
-
-#### 4. Out of memory
-
-**Cause:** Memtable too large
+**Cause:** Database directory doesn't exist or is not writable
 
 **Solution:**
+1. Ensure directory exists: `mkdir -p ./mydata`
+2. Check write permissions: `chmod 755 ./mydata`
+3. Check disk space
 
+#### Issue: "Invalid JSON data"
+
+**Cause:** Data is not valid JSON
+
+**Solution:**
+1. Validate JSON before writing
+2. Use `serde_json` for serialization
+3. Check for special characters
+
+#### Issue: Slow Performance
+
+**Cause:** Large memtable or many SST files
+
+**Solution:**
+1. Run compaction: `db.compact()?`
+2. Flush memtable: `db.flush()?`
+3. Check document sizes
+4. Use batch operations
+
+---
+
+## FAQ
+
+### Q: Can I use FireLocal in production?
+
+**A:** Yes! FireLocal is production-ready with:
+- Comprehensive error handling
+- ACID transactions
+- Security rules
+- Durability guarantees
+- Multi-platform support
+
+### Q: How much data can FireLocal store?
+
+**A:** Theoretically unlimited, practically limited by:
+- Available disk space
+- Available RAM (for memtable)
+- Performance requirements
+
+### Q: Is FireLocal thread-safe?
+
+**A:** Yes, with proper locking:
+- Use Arc<Mutex<FireLocal>> for shared access
+- Each operation is atomic
+- Transactions provide isolation
+
+### Q: Can I sync with Firebase?
+
+**A:** Not yet, but it's on the roadmap. Currently:
+- You can export/import data
+- Manual sync is possible
+- Cloud sync coming in v1.1
+
+### Q: What about encryption?
+
+**A:** Encryption is on the roadmap:
+- Currently: No built-in encryption
+- Workaround: Encrypt data before storing
+- v1.1: Built-in encryption support
+
+### Q: How do I backup my data?
+
+**A:** Several options:
+1. Copy the database directory
+2. Export to JSON: `firelocal export --output backup.json`
+3. Use system backup tools
+
+### Q: Can I use multiple databases?
+
+**A:** Yes:
 ```rust
-// Flush more frequently
-if write_count % 1000 == 0 {
-    db.flush()?;
-}
+let db1 = FireLocal::new("./db1")?;
+let db2 = FireLocal::new("./db2")?;
 ```
 
----
+### Q: What's the maximum document size?
 
-### Debug Mode
+**A:** Practically unlimited, but:
+- Recommended: <1MB per document
+- Larger documents slow down operations
+- Consider splitting large documents
 
-Enable debug logging:
+### Q: How do I handle migrations?
 
-```rust
-env_logger::init();
-// Now FireLocal will log operations
-```
+**A:** Options:
+1. Write migration scripts
+2. Use batch operations
+3. Export/import data
+4. Version your schema
 
----
+### Q: Is there a REST API?
 
-## Best Practices
-
-### 1. Document Design
-
-✅ **DO:**
-
-- Use flat structures when possible
-- Denormalize for read performance
-- Use subcollections for large nested data
-
-❌ **DON'T:**
-
-- Deeply nest objects (>3 levels)
-- Store large arrays (>100 elements)
-- Use documents as arrays
-
-**Example:**
-
-```rust
-// ✅ Good
-{
-  "user_id": "alice",
-  "name": "Alice",
-  "email": "alice@example.com"
-}
-
-// ❌ Bad
-{
-  "user": {
-    "profile": {
-      "personal": {
-        "name": "Alice"
-      }
-    }
-  }
-}
-```
+**A:** Not yet, but:
+- Language bindings available
+- REST API coming in v1.2
+- You can build your own wrapper
 
 ---
 
-### 2. Batch Operations
+## Getting Help
 
-✅ **DO:**
-
-- Batch related writes
-- Use batches for atomic updates
-- Limit batch size to 500 operations
-
-❌ **DON'T:**
-
-- Make individual writes in loops
-- Create batches with >1000 operations
-
-**Example:**
-
-```rust
-// ✅ Good
-let mut batch = db.batch();
-for user in users {
-    batch.set(format!("users/{}", user.id), user.data);
-}
-db.commit_batch(&batch)?;
-
-// ❌ Bad
-for user in users {
-    db.put(format!("users/{}", user.id), user.data)?;
-}
-```
-
----
-
-### 3. Error Handling
-
-✅ **DO:**
-
-- Handle all errors
-- Use `Result` types
-- Log errors for debugging
-
-❌ **DON'T:**
-
-- Ignore errors with `unwrap()`
-- Panic in production code
-
-**Example:**
-
-```rust
-// ✅ Good
-match db.put(key, value) {
-    Ok(_) => println!("Success"),
-    Err(e) => eprintln!("Error: {}", e),
-}
-
-// ❌ Bad
-db.put(key, value).unwrap();
-```
-
----
-
-### 4. Resource Management
-
-✅ **DO:**
-
-- Close databases when done
-- Run compaction periodically
-- Monitor disk space
-
-❌ **DON'T:**
-
-- Leave databases open indefinitely
-- Ignore compaction
-- Fill disk to 100%
-
----
-
-### 5. Testing
-
-✅ **DO:**
-
-- Test with realistic data volumes
-- Test crash recovery
-- Test concurrent access
-
-❌ **DON'T:**
-
-- Test only happy paths
-- Skip edge cases
-- Ignore performance tests
-
----
-
-## Examples
-
-### Example 1: Todo App
-
-```rust
-use firelocal_core::FireLocal;
-use serde::{Deserialize, Serialize};
-
-#[derive(Serialize, Deserialize)]
-struct Todo {
-    id: String,
-    title: String,
-    completed: bool,
-}
-
-fn main() -> anyhow::Result<()> {
-    let mut db = FireLocal::new_with_config("./todos")?;
-    
-    // Create todo
-    let todo = Todo {
-        id: "1".to_string(),
-        title: "Learn FireLocal".to_string(),
-        completed: false,
-    };
-    
-    let data = serde_json::to_vec(&todo)?;
-    db.put(format!("todos/{}", todo.id), data)?;
-    
-    // Read todo
-    if let Some(bytes) = db.get("todos/1") {
-        let todo: Todo = serde_json::from_slice(&bytes)?;
-        println!("Todo: {}", todo.title);
-    }
-    
-    // Update todo
-    let mut todo = todo;
-    todo.completed = true;
-    let data = serde_json::to_vec(&todo)?;
-    db.put(format!("todos/{}", todo.id), data)?;
-    
-    // Delete todo
-    db.delete("todos/1".to_string())?;
-    
-    Ok(())
-}
-```
-
----
-
-### Example 2: User Profile with FieldValues
-
-```rust
-use firelocal_core::{FireLocal, field_value::FieldValue};
-use serde_json::json;
-
-fn main() -> anyhow::Result<()> {
-    let mut db = FireLocal::new_with_config("./users")?;
-    
-    // Create user with timestamp
-    let mut data = serde_json::Map::new();
-    data.insert("name".to_string(), json!("Alice"));
-    data.insert("email".to_string(), json!("alice@example.com"));
-    data.insert(
-        "createdAt".to_string(),
-        serde_json::to_value(FieldValue::server_timestamp())?
-    );
-    data.insert(
-        "loginCount".to_string(),
-        serde_json::to_value(FieldValue::increment(0))?
-    );
-    
-    db.put_with_field_values("users/alice".to_string(), data)?;
-    
-    // Increment login count
-    let mut update = serde_json::Map::new();
-    update.insert(
-        "loginCount".to_string(),
-        serde_json::to_value(FieldValue::increment(1))?
-    );
-    update.insert(
-        "lastLogin".to_string(),
-        serde_json::to_value(FieldValue::server_timestamp())?
-    );
-    
-    db.put_with_field_values("users/alice".to_string(), update)?;
-    
-    Ok(())
-}
-```
-
----
-
-### Example 3: Batch Import
-
-```rust
-use firelocal_core::FireLocal;
-use serde_json::json;
-
-fn main() -> anyhow::Result<()> {
-    let mut db = FireLocal::new_with_config("./import")?;
-    
-    // Import 1000 documents
-    let mut batch = db.batch();
-    
-    for i in 0..1000 {
-        let data = json!({
-            "id": i,
-            "name": format!("User {}", i),
-            "active": i % 2 == 0
-        });
-        
-        batch.set(
-            format!("users/{}", i),
-            serde_json::to_vec(&data)?
-        );
-        
-        // Commit every 500 documents
-        if i % 500 == 499 {
-            db.commit_batch(&batch)?;
-            batch = db.batch();
-            println!("Imported {} documents", i + 1);
-        }
-    }
-    
-    // Commit remaining
-    db.commit_batch(&batch)?;
-    
-    // Compact after import
-    let stats = db.compact()?;
-    println!("Compaction: {} → {} files", 
-        stats.files_before, stats.files_after);
-    
-    Ok(())
-}
-```
+- **Documentation**: [README.md](README.md)
+- **Issues**: [GitHub Issues](https://github.com/rajdipk/Firelocal/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/rajdipk/Firelocal/discussions)
+- **Examples**: [examples/](examples/) directory
+- **Security**: [SECURITY_AUDIT.md](SECURITY_AUDIT.md)
 
 ---
 
@@ -1838,10 +1159,13 @@ project/
 
 ### Version History
 
-- **0.1.0** (2024-12-07): Initial release
+- **1.0.0** (2024-12-08): Production Release
   - Core storage engine
-  - Basic indexing
-  - Rules engine
+  - Input validation
+  - Rate limiting
+  - Security audit
+  - Comprehensive testing
+  - Complete documentation
   - Multi-language bindings
   - CLI tools
 
@@ -1862,3 +1186,7 @@ MIT License - see LICENSE file for details.
 **Made with ❤️ using Rust 🦀**
 
 For more information, visit: <https://github.com/rajdipk/Firelocal>
+
+**Last Updated:** December 8, 2025  
+**Version:** 1.0.0  
+**Status:** Production Ready

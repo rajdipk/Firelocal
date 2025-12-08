@@ -1,55 +1,78 @@
-import 'firelocal_base.dart';
+import 'dart:ffi';
+import 'dart:convert';
+import 'package:ffi/ffi.dart';
+import 'firelocal_base.dart' as ffi;
 
-enum _OperationType { set, update, delete }
-
-class _BatchOperation {
-  final _OperationType type;
-  final String path;
-  final Map<String, dynamic>? data;
-
-  _BatchOperation.set(this.path, this.data) : type = _OperationType.set;
-  _BatchOperation.update(this.path, this.data) : type = _OperationType.update;
-  _BatchOperation.delete(this.path)
-      : type = _OperationType.delete,
-        data = null;
-}
-
-/// Atomic write batch
-///
-/// Example:
-/// ```dart
-/// final batch = db.batch();
-/// batch.set('users/alice', {'name': 'Alice'});
-/// batch.set('users/bob', {'name': 'Bob'});
-/// batch.delete('users/charlie');
-/// await db.commitBatch(batch);
-/// ```
 class WriteBatch {
-  final FireLocal _db;
-  final List<_BatchOperation> _operations = [];
+  final Pointer<Void> _dbHandle;
+  Pointer<Void>? _handle;
 
-  WriteBatch(this._db);
+  WriteBatch(this._dbHandle) {
+    _handle = ffi.firelocalBatchNew(_dbHandle);
+    if (_handle == nullptr) {
+      throw Exception('Failed to create batch');
+    }
+  }
 
-  /// Add a set operation to the batch
   WriteBatch set(String path, Map<String, dynamic> data) {
-    _operations.add(_BatchOperation.set(path, data));
+    final jsonStr = jsonEncode(data);
+    final pathPtr = path.toNativeUtf8();
+    final dataPtr = jsonStr.toNativeUtf8();
+
+    try {
+      final result = ffi.firelocalBatchSet(_handle!, pathPtr, dataPtr);
+      if (result != 0) {
+        throw Exception('Failed to add set operation: $path');
+      }
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(dataPtr);
+    }
     return this;
   }
 
-  /// Add an update operation to the batch
   WriteBatch update(String path, Map<String, dynamic> data) {
-    _operations.add(_BatchOperation.update(path, data));
+    final jsonStr = jsonEncode(data);
+    final pathPtr = path.toNativeUtf8();
+    final dataPtr = jsonStr.toNativeUtf8();
+
+    try {
+      final result = ffi.firelocalBatchUpdate(_handle!, pathPtr, dataPtr);
+      if (result != 0) {
+        throw Exception('Failed to add update operation: $path');
+      }
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(dataPtr);
+    }
     return this;
   }
 
-  /// Add a delete operation to the batch
   WriteBatch delete(String path) {
-    _operations.add(_BatchOperation.delete(path));
+    final pathPtr = path.toNativeUtf8();
+
+    try {
+      final result = ffi.firelocalBatchDelete(_handle!, pathPtr);
+      if (result != 0) {
+        throw Exception('Failed to add delete operation: $path');
+      }
+    } finally {
+      malloc.free(pathPtr);
+    }
     return this;
   }
 
-  /// Commit the batch atomically
   Future<void> commit() async {
-    await _db.commitBatch(this);
+    final result = ffi.firelocalBatchCommit(_dbHandle, _handle!);
+    if (result != 0) {
+      throw Exception('Failed to commit batch');
+    }
+  }
+
+  void dispose() {
+    if (_handle != null && _handle != nullptr) {
+      ffi.firelocalBatchFree(_handle!);
+      _handle = null;
+    }
   }
 }

@@ -1,5 +1,19 @@
 [workspace]
 resolver = "2"
-members = ["bindings/js","firelocal-cli",
+members = [
     "firelocal-core",
+    "firelocal-cli",
+    "firelocal-wasm",
+    "bindings/js",
 ]
+
+[workspace.dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+anyhow = "1.0"
+tokio = { version = "1.0", features = ["full"] }
+uuid = { version = "1.19.0", features = ["v4"] }
+reqwest = { version = "0.12", features = ["blocking", "json"] }
+dotenv = "0.15"
+lazy_static = "1.5"
+crc32fast = "1.5"

@@ -1,96 +1,225 @@
 <div align="center" style="background-color: #f8f9fa; padding: 2rem; border-radius: 8px; margin-bottom: 2rem;">
-  <img src="assets/firelocal.png" alt="FireLocal Logo" width="300" style="max-width: 100%; height: auto;"/>
-  <h1 style="margin-top: 1rem;">FireLocal</h1>
+  <img src="assets/firelocal.png" alt="FireLocal Logo" width="500" style="max-width: 100%; height: auto;"/>
+  <h1 >FireLocal</h1>
   <p>
     <strong>Offline-first database with Firestore API compatibility</strong>
   </p>
   <p>
-    <a href="https://crates.io/crates/firelocal-core">
-      <img src="https://img.shields.io/crates/v/firelocal-core.svg" alt="Crates.io">
-    </a>
-    <a href="https://github.com/rajdipk/firelocal/actions">
-      <img src="https://github.com/rajdipk/firelocal/actions/workflows/ci.yml/badge.svg" alt="Build Status">
-    </a>
+    <strong>v1.0.0</strong>
+  </p>
+  <p>
     <a href="https://opensource.org/licenses/MIT">
       <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
     </a>
   </p>
 </div>
 
-FireLocal is a production-ready, offline-first database that provides Firestore-compatible APIs for local data persistence. Perfect for mobile apps, desktop applications, and any scenario requiring local-first architecture.
+**FireLocal** is a offline-first database engine that provides Firestore-compatible APIs for local data persistence. Built with Rust for performance and reliability, it's perfect for mobile apps, desktop applications, web applications, and any scenario requiring local-first architecture with zero external dependencies.
 
-## 📖 Documentation
+### Why FireLocal?
+
+-  **Production Ready** - Battle-tested error handling and recovery
+-  **Offline-First** - Works seamlessly without internet connection
+-  **Secure** - Firebase-compatible security rules engine
+-  **Fast** - LSM-Tree based storage with O(log n) operations
+-  **Multi-Platform** - Rust, JavaScript, Dart, Python, WASM
+-  **Reliable** - ACID transactions with WAL durability
+-  **Familiar** - Firestore-compatible API for Firebase developers
+
+## 📖 Documentation & Guides
 
 For complete documentation, guides, and API reference, please visit:
 
-📚 **[FireLocal Documentation](DOCUMENTATION.md)**
+📚 **[FireLocal Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide for all users and developers
+
+### Quick Links
+- [Getting Started](DOCUMENTATION.md#getting-started) - Installation and first steps
+- [API Reference](DOCUMENTATION.md#api-reference) - Complete API documentation
+- [Database Structure](DOCUMENTATION.md#database-structure) - How data is organized
+- [Security Rules](DOCUMENTATION.md#security-rules) - Authentication and authorization
+- [Examples](DOCUMENTATION.md#examples) - Code examples for all languages
+- [Troubleshooting](DOCUMENTATION.md#troubleshooting) - Common issues and solutions
 
 ## ✨ Key Features
 
 - **Firestore-Compatible API** - Familiar API for Firebase developers
 - **Offline-First** - Works without internet connection
-- **Multi-Platform** - Rust, JavaScript, Dart, Python support
-- **ACID Transactions** - Reliable data operations
-- **Security Rules** - Firebase-compatible security rules
-- **Efficient Storage** - LSM-Tree based storage engine
+- **Multi-Platform** - Rust, JavaScript, Dart, Python, WASM support
+- **ACID Transactions** - Reliable data operations with OCC
+- **Security Rules** - Firebase-compatible security rules engine
+- **Efficient Storage** - LSM-Tree based storage with O(log n) operations
 - **CLI Tools** - Manage your database from the command line
+- **Production Ready** - Battle-tested error handling and recovery
 
-## 🚀 Quick Start
+##  Quick Start (5 minutes)
 
-1. **Install** the appropriate package for your platform:
+### 1. Install for Your Platform
 
-   ```bash
-   # Rust
-   cargo add firelocal-core
+```bash
+# Rust
+cargo add firelocal-core
 
-   # JavaScript/Node.js
-   npm install firelocal
+# JavaScript/Node.js
+npm install @firelocal/node
 
-   # Python
-   pip install firelocal
+# Python
+pip install firelocal
 
-   # Dart/Flutter
-   flutter pub add firelocal_dart
-   ```
+# Dart/Flutter
+flutter pub add firelocal_dart
+```
 
-2. **Basic Usage** (Rust example):
+### 2. Basic Usage
 
-   ```rust
-   use firelocal_core::FireLocal;
-   use anyhow::Result;
+**Rust:**
+```rust
+use firelocal_core::FireLocal;
 
-   fn main() -> Result<()> {
-       // Create or open a database
-       let mut db = FireLocal::new("./mydata")?;
+fn main() -> anyhow::Result<()> {
+    let mut db = FireLocal::new("./mydata")?;
+    
+    // Write
+    db.put("users/alice".to_string(), 
+           br#"{"name":"Alice","age":30}"#.to_vec())?;
+    
+    // Read
+    if let Some(data) = db.get("users/alice") {
+        println!("User: {}", String::from_utf8_lossy(&data));
+    }
+    
+    // Delete
+    db.delete("users/alice".to_string())?;
+    
+    Ok(())
+}
+```
 
-       // Write data
-       db.put("users/alice".to_string(), br#"{"name":"Alice"}"#.to_vec())?;
+**JavaScript:**
+```javascript
+const { FireLocal } = require('@firelocal/node');
 
-       // Read data
-       if let Some(data) = db.get("users/alice") {
-           println!("User: {}", String::from_utf8_lossy(&data));
-       }
-       
-       Ok(())
-   }
-   ```
+const db = new FireLocal('./mydata');
 
-## 📚 Learn More
+// Write
+db.put('users/alice', JSON.stringify({ name: 'Alice', age: 30 }));
 
-- [Getting Started Guide](DOCUMENTATION.md#getting-started)
-- [API Reference](DOCUMENTATION.md#api-reference)
-- [Configuration Options](DOCUMENTATION.md#configuration)
-- [Security Rules](DOCUMENTATION.md#security--rules)
-- [Performance Tuning](DOCUMENTATION.md#performance--optimization)
+// Read
+const user = JSON.parse(db.get('users/alice'));
+console.log(user);
+
+// Delete
+db.delete('users/alice');
+
+db.close();
+```
+
+**Python:**
+```python
+from firelocal import FireLocal
+
+db = FireLocal('./mydata')
+
+# Write
+db.put('users/alice', {'name': 'Alice', 'age': 30})
+
+# Read
+user = db.get('users/alice')
+print(user)
+
+# Delete
+db.delete('users/alice')
+```
+
+**Dart:**
+```dart
+import 'package:firelocal_dart/firelocal_dart.dart';
+
+void main() async {
+  final db = FireLocal('./mydata');
+  
+  // Write
+  await db.put('users/alice', {'name': 'Alice', 'age': 30});
+  
+  // Read
+  final user = await db.get('users/alice');
+  print(user);
+  
+  // Delete
+  await db.delete('users/alice');
+  
+  db.dispose();
+}
+```
 
 ## 📦 Language Bindings
 
-FireLocal supports multiple programming languages:
+FireLocal supports multiple programming languages with full feature parity:
 
-- [Rust](bindings/rust/README.md) - Core implementation and primary API
-- [JavaScript/Node.js](bindings/js/README.md) - N-API bindings for Node.js
-- [Python](bindings/python/README.md) - Python bindings using PyO3
-- [Dart/Flutter](bindings/dart/README.md) - FFI bindings for Flutter apps
+| Language | Package | Status | Docs |
+|----------|---------|--------|------|
+| **Rust** | `firelocal-core` | ✅ Production Ready | [Docs](https://docs.rs/firelocal-core) |
+| **JavaScript** | `@firelocal/node` | ✅ Production Ready | [README](bindings/js/README.md) |
+| **Python** | `firelocal` | ✅ Production Ready | [README](bindings/python/README.md) |
+| **Dart/Flutter** | `firelocal_dart` | ✅ Production Ready | [README](bindings/dart/README.md) |
+| **.NET** | `FireLocal` | ✅ Production Ready | [README](bindings/dotnet/README.md) |
+| **WASM** | `firelocal-wasm` | ✅ Production Ready | [README](bindings/wasm/README.md) |
+
+## 🏗️ Architecture Overview
+
+FireLocal uses a proven LSM-Tree (Log-Structured Merge-Tree) architecture:
+
+```
+┌─────────────────────────────────────────┐
+│         Application Layer               │
+│  (Rust, JS, Dart, Python, .NET, WASM)  │
+└─────────────────────────────────────────┘
+                    │
+┌─────────────────────────────────────────┐
+│         FireLocal Core Engine           │
+│                                         │
+│  ┌─────────────────────────────────┐   │
+│  │    API Layer (Firestore-like)   │   │
+│  └─────────────────────────────────┘   │
+│                                         │
+│  ┌──────────┬──────────┬──────────┐   │
+│  │  Rules   │  Index   │  Sync    │   │
+│  │  Engine  │  Engine  │ Adapter  │   │
+│  └──────────┴──────────┴──────────┘   │
+│                                         │
+│  ┌─────────────────────────────────┐   │
+│  │  Storage Engine (LSM-Tree)      │   │
+│  │  ┌──────────────────────────┐   │   │
+│  │  │  WAL (Write-Ahead Log)   │   │   │
+│  │  └──────────────────────────┘   │   │
+│  │  ┌──────────────────────────┐   │   │
+│  │  │  Memtable (In-Memory)    │   │   │
+│  │  └──────────────────────────┘   │   │
+│  │  ┌──────────────────────────┐   │   │
+│  │  │  SST Files (Disk)        │   │   │
+│  │  └──────────────────────────┘   │   │
+│  └─────────────────────────────────┘   │
+└─────────────────────────────────────────┘
+```
+
+## ⚡ Performance Characteristics
+
+| Operation | Complexity | Notes |
+|-----------|-----------|-------|
+| **Put** | O(log n) | Write-ahead log + memtable |
+| **Get** | O(log n) | Memtable + SST lookup |
+| **Delete** | O(log n) | Tombstone marking |
+| **Batch** | O(n log n) | Single WAL flush |
+| **Transaction** | O(n) | OCC with version checking |
+| **Compaction** | O(n log n) | Background SST merging |
+| **Query** | O(n) | Full scan (indexes coming) |
+
+## 🔒 Security Features
+
+- **Firestore-Compatible Rules** - Use familiar Firebase security rules
+- **Field-Level Security** - Control access at document and field level
+- **Role-Based Access** - Implement custom authorization logic
+- **Audit Logging** - Track all database operations
+- **Encryption Ready** - Support for encrypted storage
 
 ## 🔧 CLI Tools
 
@@ -103,137 +232,84 @@ firelocal init
 # Start interactive shell
 firelocal shell
 
-# Get help
-firelocal --help
-
 # Show database info
 firelocal info
 
-# Run database compaction
+# Run compaction
 firelocal compact
+
+# Export data
+firelocal export --output data.json
+
+# Import data
+firelocal import --input data.json
+
+# Get help
+firelocal --help
 ```
 
-## 🏗️ Architecture
+## 📊 Use Cases
 
-FireLocal is built with a modular architecture:
+- **Mobile Apps** - Offline-first mobile applications
+- **Desktop Apps** - Local-first desktop applications
+- **Web Apps** - Browser-based applications with IndexedDB backend
+- **IoT Devices** - Lightweight database for edge devices
+- **Embedded Systems** - Minimal resource usage
+- **Progressive Web Apps** - Offline-capable web applications
+- **Hybrid Apps** - React Native, Flutter, Electron applications
 
-```
-┌─────────────────────────────────────┐
-│         Application Layer           │
-│  (Rust, JS, Dart, Python, CLI)     │
-└─────────────────────────────────────┘
-                 │
-┌─────────────────────────────────────┐
-│         FireLocal Core              │
-│  ┌─────────────────────────────┐   │
-│  │  API Layer (Firestore-like) │   │
-│  └─────────────────────────────┘   │
-│  ┌──────────┬──────────┬─────────┐ │
-│  │ Rules    │ Index    │ Sync    │ │
-│  │ Engine   │ Engine   │ Adapter │ │
-│  └──────────┴──────────┴─────────┘ │
-│  ┌─────────────────────────────┐   │
-│  │  Storage Engine (LSM-Tree)  │   │
-│  │  WAL → Memtable → SSTable   │   │
-│  └─────────────────────────────┘   │
-└─────────────────────────────────────┘
-```
+## 🚀 Getting Started
 
-## 🚀 Performance
-
-- **Writes**: O(log n) with WAL durability
-- **Reads**: O(log n) from memtable + SST
-- **Batches**: Single WAL flush for all operations
-- **Transactions**: Minimal overhead with version checking
+1. **Read the [Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide
+2. **Check [Language-Specific Examples](DOCUMENTATION.md#examples)** - Code samples
+3. **Review [API Reference](DOCUMENTATION.md#api-reference)** - All available methods
+4. **Explore [Security Rules](DOCUMENTATION.md#security-rules)** - Authentication setup
+5. **Run [Tests](DOCUMENTATION.md#testing)** - Verify installation
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
 
 ## 📄 License
 
-FireLocal is [MIT licensed](LICENSE).
+FireLocal is [MIT licensed](LICENSE) - free for commercial and personal use.
 
 ## 🙏 Acknowledgments
 
 - Inspired by Firebase Firestore and its ecosystem
-- Built with ❤️ using Rust
-- **Compaction**: Background SST merging
+- Built with ❤️ using Rust for performance and reliability
+- LSM-Tree architecture proven by RocksDB, LevelDB, and others
 
-## API Reference
+## 📞 Support & Community
 
-### Core Methods
+- **Documentation**: [DOCUMENTATION.md](DOCUMENTATION.md)
+- **Issues**: [GitHub Issues](https://github.com/rajdipk/Firelocal/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/rajdipk/Firelocal/discussions)
+- **Examples**: [examples/](examples/) directory
 
-| Method | Description |
-|--------|-------------|
-| `new(path)` | Create database instance |
-| `new_with_config(path)` | Create with auto .env |
-| `put(key, value)` | Write document |
-| `get(key)` | Read document |
-| `delete(key)` | Delete document |
-| `batch()` | Create write batch |
-| `commit_batch(batch)` | Commit batch atomically |
-| `run_transaction(fn)` | Run transaction with OCC |
-| `compact()` | Run compaction |
-| `flush()` | Flush memtable to SST |
+## 🗺️ Roadmap
 
-### FieldValue Helpers
-
-- `serverTimestamp()` - Current server time
-- `increment(n)` - Increment numeric field
-- `arrayUnion(elements)` - Add unique elements
-- `arrayRemove(elements)` - Remove elements
-- `delete()` - Delete field
-
-## Testing
-
-```bash
-# Run all tests
-cargo test
-
-# Run specific module tests
-cargo test --package firelocal-core
-
-# Run with output
-cargo test -- --nocapture
-```
-
-## Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Submit a pull request
-
-## License
-
-MIT License - see LICENSE file for details
-
-## Roadmap
-
+### ✅ Completed
 - [x] Core storage engine (WAL, Memtable, SST)
-- [x] Basic indexing and queries
-- [x] Rules engine
-- [x] Configuration system
+- [x] Firestore-compatible API
+- [x] Security rules engine
 - [x] Batch operations
-- [x] Transactions
+- [x] Transactions with OCC
 - [x] FieldValue helpers
 - [x] CLI tools
-- [x] JavaScript bindings
-- [ ] Dart bindings (in progress)
-- [ ] Python bindings (in progress)
+- [x] Multi-language bindings (Rust, JS, Python, Dart, .NET)
+- [x] WASM support
+- [x] Production-ready error handling
+
+### 🚀 Planned
 - [ ] Composite indexes
 - [ ] Advanced query operators
-- [ ] WASM support
-- [ ] Enhanced sync modes
+- [ ] Real-time sync with cloud
+- [ ] Replication support
+- [ ] Sharding support
+- [ ] GraphQL API
+- [ ] REST API
 
-## Support
+---
 
-- **Issues**: [GitHub Issues](https://github.com/rajdipk/Firelocal/issues)
-- **Documentation**: See `docs/` directory
-- **Examples**: See `examples/` directory
-
-## Acknowledgments
-
-Built with Rust 🦀 for performance and reliability.
+**Ready to get started?** → [Read the Complete Documentation](DOCUMENTATION.md)
