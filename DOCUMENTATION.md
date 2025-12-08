@@ -130,6 +130,7 @@ The foundation of FireLocal uses a Log-Structured Merge-Tree (LSM-Tree) architec
 - **Compaction**: Background process that merges SSTables and removes deleted entries
 
 **Benefits:**
+
 - Fast writes (append-only to WAL)
 - Crash recovery (replay WAL on startup)
 - Efficient storage (compaction removes tombstones)
@@ -270,10 +271,12 @@ users/                    ← Collection
 ```
 
 **Document Paths:**
+
 - Format: `collection/document` or `collection/document/subcollection/document`
 - Examples: `users/alice`, `users/alice/posts/post1`
 
 **Document Data:**
+
 - Stored as JSON objects
 - Supports nested structures
 - Field types: string, number, boolean, array, object, null
@@ -290,6 +293,7 @@ Every write operation is first recorded in the WAL before being applied:
 ```
 
 **Benefits:**
+
 - **Durability**: Data survives crashes
 - **Recovery**: Replay WAL on startup
 - **Performance**: Sequential writes are fast
@@ -297,16 +301,19 @@ Every write operation is first recorded in the WAL before being applied:
 ### 3. Memtable and SSTables
 
 **Memtable:**
+
 - In-memory sorted map
 - Fast reads and writes
 - Flushed to disk when full
 
 **SSTable (Sorted String Table):**
+
 - Immutable file on disk
 - Sorted by key for binary search
 - Contains data blocks and index
 
 **Read Path:**
+
 ```
 1. Check Memtable (fastest)
 2. Check SSTables (newest to oldest)
@@ -328,6 +335,7 @@ SST_new: [a=2, c=3, d=4, e=5]
 ```
 
 **Triggers:**
+
 - Number of SST files exceeds threshold
 - Manual compaction via API or CLI
 
@@ -345,6 +353,7 @@ firelocal-core = "0.1"
 ```
 
 Then run:
+
 ```bash
 cargo build
 ```
@@ -367,6 +376,7 @@ dependencies:
 ```
 
 Then run:
+
 ```bash
 flutter pub get
 # or
@@ -392,6 +402,7 @@ cargo install firelocal-cli
 ```
 
 Or build from source:
+
 ```bash
 git clone https://github.com/rajdipk/Firelocal.git
 cd firelocal/firelocal-cli
@@ -439,6 +450,7 @@ FIREBASE_MESSAGING_SENDER_ID=
 ### Using Configuration in Code
 
 **Rust:**
+
 ```rust
 // Auto-loads .env and creates config
 let db = FireLocal::new_with_config("./data")?;
@@ -451,6 +463,7 @@ if let Some(config) = db.config() {
 ```
 
 **CLI:**
+
 ```bash
 # Initialize .env
 firelocal init
@@ -477,6 +490,7 @@ let mut db = FireLocal::new("./data")?;
 ```
 
 **Parameters:**
+
 - `path`: Directory path for database storage
 
 **Returns:** `io::Result<FireLocal>`
@@ -492,11 +506,13 @@ let mut db = FireLocal::new_with_config("./data")?;
 ```
 
 **Parameters:**
+
 - `path`: Directory path for database storage
 
 **Returns:** `io::Result<FireLocal>`
 
 **Side Effects:**
+
 - Creates `.env` file if it doesn't exist
 - Loads configuration from `.env`
 
@@ -511,12 +527,14 @@ db.put("users/alice".to_string(), data)?;
 ```
 
 **Parameters:**
+
 - `key`: Document path (e.g., `"users/alice"`)
 - `value`: Document data as `Vec<u8>` (JSON bytes)
 
 **Returns:** `io::Result<()>`
 
 **Example:**
+
 ```rust
 let data = serde_json::to_vec(&json!({
     "name": "Alice",
@@ -538,11 +556,13 @@ if let Some(data) = db.get("users/alice") {
 ```
 
 **Parameters:**
+
 - `key`: Document path
 
 **Returns:** `Option<Vec<u8>>`
 
 **Example:**
+
 ```rust
 if let Some(bytes) = db.get("users/alice") {
     let json_str = String::from_utf8_lossy(&bytes);
@@ -562,6 +582,7 @@ db.delete("users/alice".to_string())?;
 ```
 
 **Parameters:**
+
 - `key`: Document path
 
 **Returns:** `io::Result<()>`
@@ -593,11 +614,13 @@ db.commit_batch(&batch)?;
 ```
 
 **Parameters:**
+
 - `batch`: WriteBatch to commit
 
 **Returns:** `Result<()>`
 
 **Guarantees:**
+
 - All operations succeed or all fail
 - Single WAL entry for entire batch
 - Atomic visibility to readers
@@ -624,11 +647,13 @@ db.run_transaction(|txn, db| {
 ```
 
 **Parameters:**
+
 - `fn`: Transaction function
 
 **Returns:** `Result<()>`
 
 **Behavior:**
+
 - Validates document versions haven't changed
 - Retries on conflict (automatic)
 - Atomic commit
@@ -649,6 +674,7 @@ println!("Tombstones removed: {}", stats.tombstones_removed);
 **Returns:** `Result<CompactionStats>`
 
 **CompactionStats:**
+
 ```rust
 pub struct CompactionStats {
     pub files_before: usize,
@@ -674,6 +700,7 @@ db.flush()?;
 **Returns:** `io::Result<()>`
 
 **When to use:**
+
 - Before shutdown for durability
 - To free memory
 - Manual control over SST creation
@@ -697,6 +724,7 @@ service cloud.firestore {
 ```
 
 **Parameters:**
+
 - `rules_str`: Security rules string
 
 **Returns:** `io::Result<()>`
@@ -938,7 +966,7 @@ print(f"Tombstones removed: {stats.tombstones_removed}")
 
 ---
 
-### .NET/C#
+### .NET/C #
 
 #### Installation
 
@@ -1004,6 +1032,7 @@ firelocal init --path ./my-project
 ```
 
 **Creates:**
+
 - `.env` file with default configuration
 - `.firelocal/data` directory
 
@@ -1019,6 +1048,7 @@ firelocal config show --path ./my-project
 ```
 
 **Output:**
+
 ```
 FireLocal Configuration
 =======================
@@ -1040,6 +1070,7 @@ firelocal shell --path ./my-project
 ```
 
 **Interactive Commands:**
+
 ```
 firelocal> put users/alice {"name":"Alice","age":30}
 ✓ Document written successfully
@@ -1138,12 +1169,14 @@ firelocal flush --path ./my-project
 Transactions provide ACID guarantees with optimistic concurrency control.
 
 **How it works:**
+
 1. Read documents and record versions
 2. Perform operations in memory
 3. Validate versions haven't changed
 4. Commit atomically or retry
 
 **Example:**
+
 ```rust
 db.run_transaction(|txn, db| {
     // Read current balance
@@ -1173,6 +1206,7 @@ db.run_transaction(|txn, db| {
 FireLocal supports basic queries with indexing.
 
 **Supported Operators:**
+
 - `Equal`: Exact match
 - `In`: Value in array
 - `NotIn`: Value not in array
@@ -1184,6 +1218,7 @@ FireLocal supports basic queries with indexing.
 - `GreaterThanOrEqual`: Numeric/string comparison
 
 **Example:**
+
 ```rust
 use firelocal_core::index::{QueryAst, QueryOperator};
 
@@ -1205,6 +1240,7 @@ for doc in results {
 Real-time updates when data changes.
 
 **Example:**
+
 ```rust
 use firelocal_core::index::{QueryAst, QueryOperator};
 
@@ -1231,6 +1267,7 @@ let listener_id = db.listen(query, Box::new(|docs| {
 FireLocal will support syncing with Firebase Firestore:
 
 **Sync Modes:**
+
 - `off`: No syncing
 - `manual`: Sync on demand
 - `live`: Real-time sync (WebSocket)
@@ -1238,6 +1275,7 @@ FireLocal will support syncing with Firebase Firestore:
 - `background`: Low-priority background sync
 
 **Configuration:**
+
 ```env
 FIRELOCAL_SYNC_MODE=live
 FIRELOCAL_SYNC_INTERVAL=60
@@ -1252,12 +1290,15 @@ FIREBASE_PROJECT_ID=your-project-id
 ### Write Performance
 
 **Characteristics:**
+
 - O(log n) complexity
 - Sequential WAL writes (fast)
 - Batching reduces overhead
 
 **Optimization Tips:**
+
 1. **Use Batches**: Combine multiple writes
+
    ```rust
    let mut batch = db.batch();
    for i in 0..1000 {
@@ -1267,6 +1308,7 @@ FIREBASE_PROJECT_ID=your-project-id
    ```
 
 2. **Flush Periodically**: Control memtable size
+
    ```rust
    if write_count % 10000 == 0 {
        db.flush()?;
@@ -1278,12 +1320,15 @@ FIREBASE_PROJECT_ID=your-project-id
 ### Read Performance
 
 **Characteristics:**
+
 - O(log n) from memtable (fast)
 - O(log n * num_ssts) from SSTables
 - Bloom filters reduce disk reads
 
 **Optimization Tips:**
+
 1. **Compact Regularly**: Reduce SST count
+
    ```rust
    if sst_count > 10 {
        db.compact()?;
@@ -1291,6 +1336,7 @@ FIREBASE_PROJECT_ID=your-project-id
    ```
 
 2. **Use Indexes**: Enable fast queries
+
    ```rust
    // Indexed query (fast)
    let query = QueryAst {
@@ -1304,17 +1350,20 @@ FIREBASE_PROJECT_ID=your-project-id
 ### Storage Optimization
 
 **Compaction Benefits:**
+
 - Removes deleted entries (tombstones)
 - Merges small SSTables
 - Reduces disk space
 - Improves read performance
 
 **When to Compact:**
+
 - After bulk deletes
 - When SST count is high (>10)
 - During low-traffic periods
 
 **Example:**
+
 ```rust
 let stats = db.compact()?;
 println!("Space saved: {} bytes", 
@@ -1421,6 +1470,7 @@ service cloud.firestore {
 **Cause:** Security rules blocking access
 
 **Solution:**
+
 ```rust
 // Check rules
 db.load_rules(r#"
@@ -1441,6 +1491,7 @@ service cloud.firestore {
 **Cause:** Too many SST files
 
 **Solution:**
+
 ```rust
 // Run compaction
 let stats = db.compact()?;
@@ -1454,6 +1505,7 @@ println!("Compacted {} files", stats.files_before);
 **Cause:** WAL replay failed
 
 **Solution:**
+
 ```rust
 // WAL is automatically replayed on startup
 // If corruption persists, check disk health
@@ -1467,6 +1519,7 @@ let db = FireLocal::new("./data")?; // Auto-recovers
 **Cause:** Memtable too large
 
 **Solution:**
+
 ```rust
 // Flush more frequently
 if write_count % 1000 == 0 {
@@ -1492,16 +1545,19 @@ env_logger::init();
 ### 1. Document Design
 
 ✅ **DO:**
+
 - Use flat structures when possible
 - Denormalize for read performance
 - Use subcollections for large nested data
 
 ❌ **DON'T:**
+
 - Deeply nest objects (>3 levels)
 - Store large arrays (>100 elements)
 - Use documents as arrays
 
 **Example:**
+
 ```rust
 // ✅ Good
 {
@@ -1527,15 +1583,18 @@ env_logger::init();
 ### 2. Batch Operations
 
 ✅ **DO:**
+
 - Batch related writes
 - Use batches for atomic updates
 - Limit batch size to 500 operations
 
 ❌ **DON'T:**
+
 - Make individual writes in loops
 - Create batches with >1000 operations
 
 **Example:**
+
 ```rust
 // ✅ Good
 let mut batch = db.batch();
@@ -1555,15 +1614,18 @@ for user in users {
 ### 3. Error Handling
 
 ✅ **DO:**
+
 - Handle all errors
 - Use `Result` types
 - Log errors for debugging
 
 ❌ **DON'T:**
+
 - Ignore errors with `unwrap()`
 - Panic in production code
 
 **Example:**
+
 ```rust
 // ✅ Good
 match db.put(key, value) {
@@ -1580,11 +1642,13 @@ db.put(key, value).unwrap();
 ### 4. Resource Management
 
 ✅ **DO:**
+
 - Close databases when done
 - Run compaction periodically
 - Monitor disk space
 
 ❌ **DON'T:**
+
 - Leave databases open indefinitely
 - Ignore compaction
 - Fill disk to 100%
@@ -1594,11 +1658,13 @@ db.put(key, value).unwrap();
 ### 5. Testing
 
 ✅ **DO:**
+
 - Test with realistic data volumes
 - Test crash recovery
 - Test concurrent access
 
 ❌ **DON'T:**
+
 - Test only happy paths
 - Skip edge cases
 - Ignore performance tests
@@ -1782,9 +1848,10 @@ project/
 ### Contributing
 
 We welcome contributions! Please see:
-- GitHub: https://github.com/rajdipk/Firelocal
-- Issues: https://github.com/rajdipk/Firelocal/issues
-- Pull Requests: https://github.com/rajdipk/Firelocal/pulls
+
+- GitHub: <https://github.com/rajdipk/Firelocal>
+- Issues: <https://github.com/rajdipk/Firelocal/issues>
+- Pull Requests: <https://github.com/rajdipk/Firelocal/pulls>
 
 ### License
 
@@ -1794,4 +1861,4 @@ MIT License - see LICENSE file for details.
 
 **Made with ❤️ using Rust 🦀**
 
-For more information, visit: https://github.com/rajdipk/Firelocal
+For more information, visit: <https://github.com/rajdipk/Firelocal>

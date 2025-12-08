@@ -1,184 +1,121 @@
-# FireLocal
-
-**Offline-first database with Firestore API compatibility**
+<div align="center">
+  <img src="assets/firelocal.png" alt="FireLocal Logo" width="200"/>
+  <h1>FireLocal</h1>
+  <p>
+    <strong>Offline-first database with Firestore API compatibility</strong>
+  </p>
+  <p>
+    <a href="https://crates.io/crates/firelocal-core">
+      <img src="https://img.shields.io/crates/v/firelocal-core.svg" alt="Crates.io">
+    </a>
+    <a href="https://github.com/rajdipk/firelocal/actions">
+      <img src="https://github.com/rajdipk/firelocal/actions/workflows/ci.yml/badge.svg" alt="Build Status">
+    </a>
+    <a href="https://opensource.org/licenses/MIT">
+      <img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT">
+    </a>
+  </p>
+</div>
 
 FireLocal is a production-ready, offline-first database that provides Firestore-compatible APIs for local data persistence. Perfect for mobile apps, desktop applications, and any scenario requiring local-first architecture.
 
-## Features
+## 📖 Documentation
 
-✅ **Firestore-Compatible API** - Drop-in replacement for offline scenarios  
-✅ **Smart Configuration** - Auto-creates/populates `.env` files  
-✅ **Batch Operations** - Atomic multi-document writes  
-✅ **Transactions** - Optimistic concurrency control  
-✅ **FieldValue Helpers** - `serverTimestamp()`, `increment()`, `arrayUnion()`, etc.  
-✅ **Compaction** - Automatic disk space optimization  
-✅ **Rules Engine** - Firebase-compatible security rules  
-✅ **Multi-Language** - Rust, JavaScript/Node.js, Dart, Python bindings  
-✅ **CLI Tools** - Interactive shell and management commands  
+For complete documentation, guides, and API reference, please visit:
 
-## Quick Start
+📚 **[FireLocal Documentation](DOCUMENTATION.md)**
 
-### Installation
+## ✨ Key Features
 
-**Rust:**
-```toml
-[dependencies]
-firelocal-core = "0.1"
-```
+- **Firestore-Compatible API** - Familiar API for Firebase developers
+- **Offline-First** - Works without internet connection
+- **Multi-Platform** - Rust, JavaScript, Dart, Python support
+- **ACID Transactions** - Reliable data operations
+- **Security Rules** - Firebase-compatible security rules
+- **Efficient Storage** - LSM-Tree based storage engine
+- **CLI Tools** - Manage your database from the command line
 
-**JavaScript/Node.js:**
-```bash
-npm install firelocal
-```
+## 🚀 Quick Start
 
-**Dart:**
-```yaml
-dependencies:
-  firelocal_dart: ^0.1.0
-```
+1. **Install** the appropriate package for your platform:
 
-**Python:**
-```bash
-pip install firelocal
-```
+   ```bash
+   # Rust
+   cargo add firelocal-core
 
-### Basic Usage
+   # JavaScript/Node.js
+   npm install firelocal
 
-**Rust:**
-```rust
-use firelocal_core::FireLocal;
+   # Python
+   pip install firelocal
 
-// Create database with auto .env configuration
-let mut db = FireLocal::new_with_config("./data")?;
+   # Dart/Flutter
+   flutter pub add firelocal_dart
+   ```
 
-// Write data
-db.put("users/alice".to_string(), br#"{"name":"Alice","age":30}"#.to_vec())?;
+2. **Basic Usage** (Rust example):
 
-// Read data
-if let Some(data) = db.get("users/alice") {
-    println!("{}", String::from_utf8_lossy(&data));
-}
+   ```rust
+   use firelocal_core::FireLocal;
+   use anyhow::Result;
 
-// Delete data
-db.delete("users/alice".to_string())?;
-```
+   fn main() -> Result<()> {
+       // Create or open a database
+       let mut db = FireLocal::new("./mydata")?;
 
-**JavaScript:**
-```javascript
-import FireLocal, { serverTimestamp, increment } from 'firelocal';
+       // Write data
+       db.put("users/alice".to_string(), br#"{"name":"Alice"}"#.to_vec())?;
 
-const db = new FireLocal('./data');
+       // Read data
+       if let Some(data) = db.get("users/alice") {
+           println!("User: {}", String::from_utf8_lossy(&data));
+       }
+       
+       Ok(())
+   }
+   ```
 
-// Write with FieldValue
-const data = {
-    name: 'Alice',
-    timestamp: serverTimestamp(),
-    loginCount: increment(1)
-};
-db.put('users/alice', JSON.stringify(data));
+## 📚 Learn More
 
-// Batch operations
-const batch = db.batch();
-batch.set('users/bob', JSON.stringify({name: 'Bob'}));
-batch.set('users/charlie', JSON.stringify({name: 'Charlie'}));
-db.commitBatch(batch);
+- [Getting Started Guide](DOCUMENTATION.md#getting-started)
+- [API Reference](DOCUMENTATION.md#api-reference)
+- [Configuration Options](DOCUMENTATION.md#configuration)
+- [Security Rules](DOCUMENTATION.md#security--rules)
+- [Performance Tuning](DOCUMENTATION.md#performance--optimization)
 
-// Compaction
-const stats = db.compact();
-console.log(`Saved ${stats.tombstonesRemoved} tombstones`);
-```
+## 📦 Language Bindings
 
-### CLI Usage
+FireLocal supports multiple programming languages:
+
+- [Rust](bindings/rust/README.md) - Core implementation and primary API
+- [JavaScript/Node.js](bindings/js/README.md) - N-API bindings for Node.js
+- [Python](bindings/python/README.md) - Python bindings using PyO3
+- [Dart/Flutter](bindings/dart/README.md) - FFI bindings for Flutter apps
+
+## 🔧 CLI Tools
+
+Manage your FireLocal databases from the command line:
 
 ```bash
-# Initialize project (creates .env)
+# Initialize a new project
 firelocal init
 
-# Show configuration
-firelocal config show
-
-# Interactive shell
+# Start interactive shell
 firelocal shell
 
-# Put document
-firelocal put users/alice '{"name":"Alice"}'
+# Get help
+firelocal --help
 
-# Get document
-firelocal get users/alice
+# Show database info
+firelocal info
 
-# Run compaction
+# Run database compaction
 firelocal compact
 ```
 
-## Configuration
+## 🏗️ Architecture
 
-FireLocal auto-creates a `.env` file with smart defaults:
-
-```env
-# FireLocal Configuration
-FIRELOCAL_PROJECT_ID=my-firelocal-project
-FIRELOCAL_DB_PATH=./.firelocal/data
-FIRELOCAL_SYNC_MODE=off
-FIRELOCAL_SYNC_INTERVAL=300
-
-# Firebase Credentials (optional, for sync)
-FIREBASE_API_KEY=
-FIREBASE_APP_ID=
-FIREBASE_PROJECT_ID=
-```
-
-## Advanced Features
-
-### Batch Operations
-
-```rust
-let mut batch = db.batch();
-batch
-    .set("users/alice".to_string(), data1)
-    .set("users/bob".to_string(), data2)
-    .delete("users/charlie".to_string());
-db.commit_batch(&batch)?; // Atomic commit
-```
-
-### Transactions
-
-```rust
-db.run_transaction(|txn, db| {
-    let data = txn.get("counter", db.get("counter"), 1);
-    // Perform updates
-    txn.set("counter".to_string(), new_value);
-    Ok(())
-})?; // Auto-validates versions
-```
-
-### FieldValue Helpers
-
-```rust
-use firelocal_core::field_value::FieldValue;
-
-let mut data = serde_json::Map::new();
-data.insert("timestamp", serde_json::to_value(FieldValue::server_timestamp())?);
-data.insert("count", serde_json::to_value(FieldValue::increment(1))?);
-data.insert("tags", serde_json::to_value(FieldValue::array_union(vec![json!("new")]))?);
-
-db.put_with_field_values("doc1".to_string(), data)?;
-```
-
-### Security Rules
-
-```rust
-db.load_rules(r#"
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
-    }
-  }
-}
-"#)?;
-```
-
-## Architecture
+FireLocal is built with a modular architecture:
 
 ```
 ┌─────────────────────────────────────┐
@@ -202,12 +139,25 @@ service cloud.firestore {
 └─────────────────────────────────────┘
 ```
 
-## Performance
+## 🚀 Performance
 
 - **Writes**: O(log n) with WAL durability
 - **Reads**: O(log n) from memtable + SST
 - **Batches**: Single WAL flush for all operations
 - **Transactions**: Minimal overhead with version checking
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details on how to get started.
+
+## 📄 License
+
+FireLocal is [MIT licensed](LICENSE).
+
+## 🙏 Acknowledgments
+
+- Inspired by Firebase Firestore and its ecosystem
+- Built with ❤️ using Rust
 - **Compaction**: Background SST merging
 
 ## API Reference
