@@ -1,5 +1,6 @@
 pub mod api;
 pub mod config;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
 pub mod field_value;
 pub mod index;
@@ -7,6 +8,7 @@ pub mod listener;
 pub mod model;
 pub mod rules;
 pub mod store;
+#[cfg(feature = "sync")]
 pub mod sync;
 pub mod transaction;
 pub mod validation;
@@ -23,6 +25,7 @@ use crate::store::io::{StdStorage, Storage};
 use crate::store::memtable::Memtable;
 use crate::store::sst::{SstBuilder, SstReader, SstSearchResult};
 use crate::store::wal::WriteAheadLog;
+#[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 use crate::sync::{MockRemoteStore, RemoteStore, SyncManager};
 use crate::transaction::{execute_batch_operation, Transaction, WriteBatch};
 use anyhow::Result;
@@ -40,6 +43,7 @@ pub struct FireLocal<S: Storage = StdStorage> {
     index: Arc<dyn IndexProvider>,
     listeners: ListenerManager,
     rules: RulesEngine,
+    #[cfg(feature = "sync")]
     sync: SyncManager,
     config: Option<FireLocalConfig>,
     document_versions: HashMap<String, u64>,
@@ -165,6 +169,7 @@ impl<S: Storage> FireLocal<S> {
             index,
             listeners: ListenerManager::new(),
             rules: RulesEngine::new(),
+            #[cfg(feature = "sync")]
             sync: SyncManager::new(Box::new(MockRemoteStore)),
             config: None,
             document_versions: HashMap::new(),
@@ -172,6 +177,7 @@ impl<S: Storage> FireLocal<S> {
     }
 
     // Allow swapping remote store
+    #[cfg(feature = "sync")]
     pub fn set_remote_store(&mut self, remote: Box<dyn RemoteStore>) {
         self.sync = SyncManager::new(remote);
     }
@@ -351,6 +357,7 @@ impl<S: Storage> FireLocal<S> {
     }
 
     // Sync Operations
+    #[cfg(feature = "sync")]
     pub fn sync_push(&self, key: &str) -> io::Result<()> {
         if let Some(bytes) = self.get(key) {
             if let Ok(s) = std::str::from_utf8(&bytes) {
@@ -368,6 +375,7 @@ impl<S: Storage> FireLocal<S> {
         ))
     }
 
+    #[cfg(feature = "sync")]
     pub fn sync_pull(&mut self, key: &str) -> io::Result<()> {
         if let Ok(Some(doc)) = self
             .sync

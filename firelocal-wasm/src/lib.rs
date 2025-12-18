@@ -1,5 +1,5 @@
 use firelocal_core::store::io::MemoryStorage;
-use firelocal_core::{sync::MockRemoteStore, FireLocal as FireLocalCore};
+use firelocal_core::FireLocal as FireLocalCore;
 use std::sync::Arc;
 use std::sync::Mutex;
 use wasm_bindgen::prelude::*;
