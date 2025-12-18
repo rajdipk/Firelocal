@@ -1,176 +1,100 @@
+use firelocal_core::store::io::MemoryStorage;
+use firelocal_core::{sync::MockRemoteStore, FireLocal as FireLocalCore};
+use std::sync::Arc;
+use std::sync::Mutex;
 use wasm_bindgen::prelude::*;
-use serde::{Deserialize, Serialize};
 
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn log(s: &str);
+
+    #[wasm_bindgen(js_namespace = console)]
+    fn error(s: &str);
 }
 
-/// FireLocal WASM bindings for browser use
+// We need to wrap the Core instance.
+// Since FireLocalCore is not thread-safe by default (RefCell/etc internal?),
+// but we defined it with Send+Sync components mainly (Arc<Mutex>).
+// However, wasm_bindgen requires structs to be opaque pointers effectively.
+// We can store it in a Mutex assuming single-threaded WASM context usually,
+// but Rust checks bounds.
+
 #[wasm_bindgen]
 pub struct FireLocal {
-    path: String,
-    // Note: Actual implementation would use IndexedDB or similar
+    inner: Arc<Mutex<FireLocalCore<MemoryStorage>>>,
 }
 
 #[wasm_bindgen]
 impl FireLocal {
     #[wasm_bindgen(constructor)]
     pub fn new(path: String) -> Result<FireLocal, JsValue> {
-        log(&format!("Creating FireLocal at: {}", path));
-        
-        Ok(FireLocal { path })
+        log(&format!(
+            "🔥 FireLocal WASM (Core Powered) initialized at: {}",
+            path
+        ));
+
+        // Initialize Core with MemoryStorage
+        // In the future, we can back MemoryStorage with IndexedDB by loading/saving snapshots.
+        let storage = MemoryStorage::new();
+
+        let db = FireLocalCore::new_with_storage(path, storage)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        Ok(FireLocal {
+            inner: Arc::new(Mutex::new(db)),
+        })
     }
 
     /// Write a document
     #[wasm_bindgen]
-    pub async fn put(&mut self, key: String, value: JsValue) -> Result<(), JsValue> {
+    pub fn put(&self, key: String, value: JsValue) -> Result<(), JsValue> {
         let json_str = js_sys::JSON::stringify(&value)
-            .map_err(|e| JsValue::from_str("Failed to stringify value"))?;
-        
-        let value_str = json_str.as_string()
+            .map_err(|_| JsValue::from_str("Failed to stringify value"))?;
+
+        let value_str = json_str
+            .as_string()
             .ok_or_else(|| JsValue::from_str("Invalid JSON"))?;
-        
-        log(&format!("Put: {} = {}", key, value_str));
-        
-        // In production, this would:
-        // 1. Store in IndexedDB
-        // 2. Update in-memory cache
-        // 3. Trigger sync if enabled
-        
+
+        let mut db = self.inner.lock().unwrap();
+        db.put(key.clone(), value_str.into_bytes())
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+        // log(&format!("✅ Put: {}", key));
         Ok(())
     }
 
     /// Read a document
     #[wasm_bindgen]
-    pub async fn get(&self, key: String) -> Result<JsValue, JsValue> {
-        log(&format!("Get: {}", key));
-        
-        // In production, this would:
-        // 1. Check in-memory cache
-        // 2. Query IndexedDB
-        // 3. Return parsed JSON
-        
-        Ok(JsValue::NULL)
+    pub fn get(&self, key: String) -> Result<JsValue, JsValue> {
+        let db = self.inner.lock().unwrap();
+
+        if let Some(bytes) = db.get(&key) {
+            let s = std::str::from_utf8(&bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
+            let parsed =
+                js_sys::JSON::parse(s).map_err(|_| JsValue::from_str("Failed to parse JSON"))?;
+            Ok(parsed)
+        } else {
+            Ok(JsValue::NULL)
+        }
     }
 
     /// Delete a document
     #[wasm_bindgen]
-    pub async fn delete(&mut self, key: String) -> Result<(), JsValue> {
-        log(&format!("Delete: {}", key));
-        
-        // In production, this would:
-        // 1. Remove from IndexedDB
-        // 2. Update cache
-        // 3. Add tombstone
-        
+    pub fn delete(&self, key: String) -> Result<(), JsValue> {
+        let mut db = self.inner.lock().unwrap();
+        db.delete(key)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
         Ok(())
-    }
-
-    /// Create a write batch
-    #[wasm_bindgen]
-    pub fn batch(&self) -> WriteBatch {
-        WriteBatch::new()
     }
 
     /// Run compaction
     #[wasm_bindgen]
-    pub async fn compact(&self) -> Result<CompactionStats, JsValue> {
-        log("Running compaction");
-        
-        Ok(CompactionStats {
-            files_before: 0,
-            files_after: 0,
-            tombstones_removed: 0,
-        })
-    }
-}
-
-/// Write batch for atomic operations
-#[wasm_bindgen]
-pub struct WriteBatch {
-    operations: Vec<String>,
-}
-
-#[wasm_bindgen]
-impl WriteBatch {
-    #[wasm_bindgen(constructor)]
-    pub fn new() -> WriteBatch {
-        WriteBatch {
-            operations: Vec::new(),
-        }
-    }
-
-    #[wasm_bindgen]
-    pub fn set(&mut self, path: String, data: JsValue) -> Result<(), JsValue> {
-        self.operations.push(format!("set:{}", path));
-        Ok(())
-    }
-
-    #[wasm_bindgen]
-    pub fn delete(&mut self, path: String) {
-        self.operations.push(format!("delete:{}", path));
-    }
-
-    #[wasm_bindgen]
-    pub async fn commit(&self) -> Result<(), JsValue> {
-        log(&format!("Committing {} operations", self.operations.len()));
-        Ok(())
-    }
-}
-
-/// Compaction statistics
-#[wasm_bindgen]
-#[derive(Serialize, Deserialize)]
-pub struct CompactionStats {
-    pub files_before: u32,
-    pub files_after: u32,
-    pub tombstones_removed: u32,
-}
-
-/// FieldValue helpers
-#[wasm_bindgen]
-pub fn server_timestamp() -> JsValue {
-    let ts = js_sys::Date::now() as i64;
-    let obj = js_sys::Object::new();
-    js_sys::Reflect::set(
-        &obj,
-        &JsValue::from_str("_firelocal_field_value"),
-        &JsValue::from_str("serverTimestamp"),
-    ).unwrap();
-    js_sys::Reflect::set(
-        &obj,
-        &JsValue::from_str("value"),
-        &JsValue::from_f64(ts as f64),
-    ).unwrap();
-    obj.into()
-}
-
-#[wasm_bindgen]
-pub fn increment(n: i32) -> JsValue {
-    let obj = js_sys::Object::new();
-    js_sys::Reflect::set(
-        &obj,
-        &JsValue::from_str("_firelocal_field_value"),
-        &JsValue::from_str("increment"),
-    ).unwrap();
-    js_sys::Reflect::set(
-        &obj,
-        &JsValue::from_str("value"),
-        &JsValue::from_f64(n as f64),
-    ).unwrap();
-    obj.into()
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use wasm_bindgen_test::*;
-
-    #[wasm_bindgen_test]
-    fn test_firelocal_creation() {
-        let db = FireLocal::new("./test".to_string()).unwrap();
-        assert_eq!(db.path, "./test");
+    pub async fn compact(&self) -> Result<JsValue, JsValue> {
+        log("Running compaction (Stub)");
+        // let db = self.inner.lock().unwrap();
+        // let stats = db.compact().map_err(|e| JsValue::from_str(&e.to_string()))?;
+        // For now just return empty object
+        Ok(js_sys::Object::new().into())
     }
 }

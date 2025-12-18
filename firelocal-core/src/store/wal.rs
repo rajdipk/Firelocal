@@ -1,12 +1,9 @@
+use crate::store::io::{FileHandle, Storage};
 use crc32fast::Hasher;
-use std::fs::{File, OpenOptions};
-use std::io::{self, Write};
-use std::path::Path;
-
-use std::io::{BufReader, Read};
-use std::path::PathBuf;
-
 use serde::{Deserialize, Serialize};
+use std::io::{self, BufReader, Read, Seek, Write};
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum WalOp {
@@ -42,17 +39,34 @@ impl WalEntry {
     }
 }
 
-pub struct WriteAheadLog {
-    file: File,
+pub struct WriteAheadLog<S: Storage> {
+    file: S::File,
     path: PathBuf,
+    storage: Arc<S>,
 }
 
-impl WriteAheadLog {
-    pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
+impl<S: Storage> WriteAheadLog<S> {
+    pub fn open(storage: Arc<S>, path: impl AsRef<Path>) -> io::Result<Self> {
         let p = path.as_ref().to_path_buf();
-        let file = OpenOptions::new().create(true).append(true).open(&p)?;
+        // WAL must be append-only.
+        // In StdStorage we would use OpenOptions::append(true).
+        // Our FileHandle trait doesn't strictly enforce open mode,
+        // so we depend on the Storage implementation or seek to end.
 
-        Ok(Self { file, path: p })
+        let mut file = if storage.exists(&p) {
+            storage.open(&p)?
+        } else {
+            storage.create(&p)?
+        };
+
+        // Ensure we are at the end for appending
+        file.seek(std::io::SeekFrom::End(0))?;
+
+        Ok(Self {
+            file,
+            path: p,
+            storage,
+        })
     }
 
     pub fn append(&mut self, data: &[u8]) -> io::Result<()> {
@@ -68,19 +82,23 @@ impl WriteAheadLog {
         Ok(())
     }
 
-    pub fn iter(&self) -> io::Result<WalIterator> {
-        let file = File::open(&self.path)?;
+    pub fn iter(&self) -> io::Result<WalIterator<S::File>> {
+        // We need a readable handle from the start.
+        // Our FileHandle supports seek, so we could technically use the same handle if we locked it,
+        // but for iteration we usually want a separate reader.
+        // `Storage::open` returns a new handle.
+        let file = self.storage.open(&self.path)?;
         Ok(WalIterator {
             reader: BufReader::new(file),
         })
     }
 }
 
-pub struct WalIterator {
-    reader: BufReader<File>,
+pub struct WalIterator<F: Read> {
+    reader: BufReader<F>,
 }
 
-impl Iterator for WalIterator {
+impl<F: Read> Iterator for WalIterator<F> {
     type Item = io::Result<Vec<u8>>;
 
     fn next(&mut self) -> Option<Self::Item> {

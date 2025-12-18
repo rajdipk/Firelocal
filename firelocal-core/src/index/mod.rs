@@ -99,6 +99,7 @@ pub trait IndexProvider: Send + Sync {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QueryAst {
+    pub collection: Option<String>,
     pub field: String,
     pub operator: QueryOperator,
 }

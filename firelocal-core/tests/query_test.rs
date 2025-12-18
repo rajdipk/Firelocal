@@ -1,5 +1,5 @@
-use firelocal_core::FireLocal;
 use firelocal_core::index::{QueryAst, QueryOperator};
+use firelocal_core::FireLocal;
 use serde_json::json;
 use std::fs;
 
@@ -52,6 +52,7 @@ fn test_query_indexing() {
 
     // 2. Query: active == true
     let q = QueryAst {
+        collection: Some("users".to_string()),
         field: "active".to_string(),
         operator: QueryOperator::Equal(json!(true)),
     };
@@ -67,6 +68,7 @@ fn test_query_indexing() {
 
     // 3. Query: age == 25
     let q2 = QueryAst {
+        collection: Some("users".to_string()),
         field: "age".to_string(),
         operator: QueryOperator::Equal(json!(25)),
     };

@@ -14,6 +14,10 @@ impl RulesEngine {
         Self { ruleset: None }
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.ruleset.is_none()
+    }
+
     pub fn load_rules(&mut self, rules_str: &str) -> Result<(), String> {
         let mut parser = RulesParser::new(rules_str);
         let ruleset = parser.parse()?;

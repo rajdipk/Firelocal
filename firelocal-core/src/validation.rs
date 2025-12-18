@@ -2,24 +2,63 @@
 use anyhow::{anyhow, Result};
 
 /// Validate document path
-/// 
+///
 /// Only basic validation:
 /// - Not empty
 /// - Maximum 4096 characters
+const MAX_PATH_LENGTH: usize = 4096;
+const MAX_PATH_DEPTH: usize = 100;
+
+/// Validate document path
+///
+/// Rules:
+/// - Not empty
+/// - Maximum 4096 characters
+/// - Maximum 100 segments
+/// - No leading/trailing slashes
+/// - No consecutive slashes
+/// - Valid characters: alphanumeric, underscore, hyphen
 pub fn validate_path(path: &str) -> Result<()> {
     if path.is_empty() {
         return Err(anyhow!("Path cannot be empty"));
     }
 
-    if path.len() > 4096 {
-        return Err(anyhow!("Path too long (max 4096 characters)"));
+    if path.len() > MAX_PATH_LENGTH {
+        return Err(anyhow!(
+            "Path too long (max {} characters)",
+            MAX_PATH_LENGTH
+        ));
+    }
+
+    if path.starts_with('/') || path.ends_with('/') {
+        return Err(anyhow!("Path cannot start or end with '/'"));
+    }
+
+    if path.contains("//") {
+        return Err(anyhow!("Path cannot contain consecutive slashes"));
+    }
+
+    let segments: Vec<&str> = path.split('/').collect();
+    if segments.len() > MAX_PATH_DEPTH {
+        return Err(anyhow!("Path too deep (max {} segments)", MAX_PATH_DEPTH));
+    }
+
+    for segment in segments {
+        if segment.is_empty() {
+            return Err(anyhow!("Path segment cannot be empty"));
+        }
+        for c in segment.chars() {
+            if !c.is_alphanumeric() && c != '_' && c != '-' {
+                return Err(anyhow!("Invalid character in path: '{}'", c));
+            }
+        }
     }
 
     Ok(())
 }
 
 /// Validate document data size
-/// 
+///
 /// Rules:
 /// - Not empty
 /// - Maximum 100MB per document
@@ -41,23 +80,26 @@ pub fn validate_data_size(data: &[u8]) -> Result<()> {
 }
 
 /// Validate JSON data
-/// 
-/// Only basic validation:
+///
+/// Rules:
 /// - Valid UTF-8
+/// - Valid JSON structure
 pub fn validate_json(data: &[u8]) -> Result<()> {
     // Check if valid UTF-8
-    std::str::from_utf8(data)
-        .map_err(|_| anyhow!("Document data must be valid UTF-8"))?;
-    
-    // Skip strict JSON validation for better performance and flexibility
+    let s = std::str::from_utf8(data).map_err(|_| anyhow!("Document data must be valid UTF-8"))?;
+
+    // Strict JSON validation
+    serde_json::from_str::<serde::de::IgnoredAny>(s).map_err(|_| anyhow!("Invalid JSON data"))?;
+
     Ok(())
 }
 
 /// Validate security rules
-/// 
+///
 /// Simplified validation:
 /// - Not empty
 /// - Maximum 1MB
+/// - Must contain "service cloud.firestore"
 pub fn validate_rules(rules: &str) -> Result<()> {
     if rules.is_empty() {
         return Err(anyhow!("Rules cannot be empty"));
@@ -66,8 +108,13 @@ pub fn validate_rules(rules: &str) -> Result<()> {
     if rules.len() > 1024 * 1024 {
         return Err(anyhow!("Rules too large (max 1MB)"));
     }
-    
-    // Skip Firestore-specific validation for more flexibility
+
+    if !rules.contains("service cloud.firestore") {
+        return Err(anyhow!(
+            "Invalid rules format: missing 'service cloud.firestore'"
+        ));
+    }
+
     Ok(())
 }
 
@@ -80,7 +127,7 @@ pub struct RateLimiter {
 
 impl RateLimiter {
     /// Create a new rate limiter
-    /// 
+    ///
     /// # Arguments
     /// * `max_requests` - Maximum requests per window
     /// * `window_secs` - Time window in seconds
@@ -88,15 +135,15 @@ impl RateLimiter {
         Self {
             max_requests,
             window_secs,
-            requests: std::sync::Arc::new(std::sync::Mutex::new(
-                std::collections::VecDeque::new(),
-            )),
+            requests: std::sync::Arc::new(std::sync::Mutex::new(std::collections::VecDeque::new())),
         }
     }
 
     /// Check if operation is allowed
     pub fn check(&self) -> Result<()> {
-        let mut requests = self.requests.lock()
+        let mut requests = self
+            .requests
+            .lock()
             .map_err(|_| anyhow!("Rate limiter lock poisoned"))?;
 
         let now = std::time::Instant::now();

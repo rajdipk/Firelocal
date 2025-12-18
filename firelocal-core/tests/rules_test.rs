@@ -8,9 +8,8 @@ fn test_rules_parser_and_enforcement() {
 
     let mut db = FireLocal::new(path).unwrap();
 
-    // 1. Default: deny all (if rules engine is present but empty? Or default deny?)
-    // Our implementation: evaluation returns false if no ruleset, so Deny All default.
-    assert!(db.put("any/path".to_string(), b"data".to_vec()).is_err());
+    // 1. Default: Allow all (dev mode) when no rules are loaded
+    assert!(db.put("any/path".to_string(), b"data".to_vec()).is_ok());
 
     // 2. Load rules: Allow read, write to /users/{uid}
     let rules = r#"
@@ -26,10 +25,9 @@ fn test_rules_parser_and_enforcement() {
     db.load_rules(rules).expect("Failed to parse rules");
 
     // 3. Test Allowed Write
-    assert!(
-        db.put("users/alice".to_string(), b"alice_data".to_vec())
-            .is_ok()
-    );
+    assert!(db
+        .put("users/alice".to_string(), b"alice_data".to_vec())
+        .is_ok());
 
     // 4. Test Allowed Read
     assert!(db.get("users/alice").is_some());

@@ -1,5 +1,5 @@
+use crate::store::io::{FileHandle, Storage};
 use crate::store::memtable::{Entry, Memtable};
-use std::fs::{File, OpenOptions};
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
@@ -10,18 +10,13 @@ use std::path::Path;
 const FLAG_PUT: u8 = 0;
 const FLAG_DELETE: u8 = 1;
 
-pub struct SstBuilder {
-    writer: BufWriter<File>,
+pub struct SstBuilder<F: Write> {
+    writer: BufWriter<F>,
 }
 
-impl SstBuilder {
-    pub fn new(path: impl AsRef<Path>) -> io::Result<Self> {
-        let file = OpenOptions::new()
-            .create(true)
-            .write(true)
-            .truncate(true)
-            .open(path)?;
-
+impl<F: Write> SstBuilder<F> {
+    pub fn new<S: Storage<File = F>>(storage: &S, path: impl AsRef<Path>) -> io::Result<Self> {
+        let file = storage.create(path.as_ref())?;
         Ok(Self {
             writer: BufWriter::new(file),
         })
@@ -56,13 +51,13 @@ impl SstBuilder {
     }
 }
 
-pub struct SstReader {
-    file: BufReader<File>,
+pub struct SstReader<F: Read + Seek> {
+    file: BufReader<F>,
 }
 
-impl SstReader {
-    pub fn open(path: impl AsRef<Path>) -> io::Result<Self> {
-        let file = File::open(path)?;
+impl<F: Read + Seek> SstReader<F> {
+    pub fn open<S: Storage<File = F>>(storage: &S, path: impl AsRef<Path>) -> io::Result<Self> {
+        let file = storage.open(path.as_ref())?;
         Ok(Self {
             file: BufReader::new(file),
         })

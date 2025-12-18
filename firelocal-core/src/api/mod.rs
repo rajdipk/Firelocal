@@ -1,6 +1,6 @@
-use crate::FireLocal;
 use crate::index::{QueryAst, QueryOperator};
 use crate::model::Document;
+use crate::FireLocal;
 use serde_json::Value;
 use std::sync::Arc;
 
@@ -24,6 +24,7 @@ impl CollectionReference {
     // Simple Query builder
     pub fn where_eq(&self, field: &str, value: Value) -> Query {
         let q = QueryAst {
+            collection: Some(self.path.clone()),
             field: field.to_string(),
             operator: QueryOperator::Equal(value),
         };
@@ -41,7 +42,9 @@ pub struct DocumentReference {
 
 impl DocumentReference {
     pub fn set(&self, data: Value) -> anyhow::Result<()> {
-        let mut db = self.db.lock()
+        let mut db = self
+            .db
+            .lock()
             .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         // Construct full document with path
         let doc = Document {
@@ -75,7 +78,9 @@ impl DocumentReference {
     }
 
     pub fn delete(&self) -> anyhow::Result<()> {
-        let mut db = self.db.lock()
+        let mut db = self
+            .db
+            .lock()
             .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         db.delete(self.path.clone())?;
         Ok(())
@@ -89,7 +94,9 @@ pub struct Query {
 
 impl Query {
     pub fn get(&self) -> anyhow::Result<Vec<Document>> {
-        let db = self.db.lock()
+        let db = self
+            .db
+            .lock()
             .map_err(|e| anyhow::anyhow!("Database lock poisoned: {}", e))?;
         Ok(db.query(&self.ast)?)
     }

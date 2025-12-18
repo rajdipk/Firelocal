@@ -1,5 +1,7 @@
-use crate::store::wal::{WalEntry, WriteAheadLog};
-use anyhow::Result;
+use crate::store::io::Storage;
+use crate::store::memtable::Memtable;
+use crate::store::wal::{WalEntry, WalOp, WriteAheadLog};
+use anyhow::{anyhow, Result};
 use std::collections::HashMap;
 use std::io;
 use uuid::Uuid;
@@ -156,21 +158,21 @@ impl Default for Transaction {
 }
 
 /// Helper to execute a batch operation
-pub fn execute_batch_operation(
+pub fn execute_batch_operation<S: Storage>(
     op: &BatchOperation,
-    wal: &mut WriteAheadLog,
+    wal: &mut WriteAheadLog<S>,
     memtable: &mut crate::store::memtable::Memtable,
-    batch_id: Option<&str>,
+    batch_id: Option<String>,
 ) -> Result<()> {
     match op {
         BatchOperation::Set { path, data } | BatchOperation::Update { path, data } => {
-            let entry = WalEntry::put(path.clone(), data.clone(), batch_id);
+            let entry = WalEntry::put(path.clone(), data.clone(), batch_id.as_deref());
             let entry_bytes = serde_json::to_vec(&entry)?;
             wal.append(&entry_bytes)?;
             memtable.put(path.clone(), data.clone());
         }
         BatchOperation::Delete { path } => {
-            let entry = WalEntry::delete(path.clone(), batch_id);
+            let entry = WalEntry::delete(path.clone(), batch_id.as_deref());
             let entry_bytes = serde_json::to_vec(&entry)?;
             wal.append(&entry_bytes)?;
             memtable.delete(path.clone());

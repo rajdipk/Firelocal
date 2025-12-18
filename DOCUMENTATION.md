@@ -12,17 +12,19 @@
 2. [What is FireLocal?](#what-is-firelocal)
 3. [Architecture Overview](#architecture-overview)
 4. [Getting Started](#getting-started)
-5. [Core Concepts](#core-concepts)
-6. [Installation Guide](#installation-guide)
-7. [Database Structure](#database-structure)
-8. [How It Works](#how-it-works)
-9. [API Reference](#api-reference)
-10. [Security Rules](#security-rules)
-11. [Examples](#examples)
-12. [Advanced Topics](#advanced-topics)
-13. [Performance Tuning](#performance-tuning)
-14. [Troubleshooting](#troubleshooting)
-15. [FAQ](#faq)
+5. [Windows Desktop Integration](#windows-desktop-integration)
+6. [Web (WASM) Integration](#web-wasm-integration)
+7. [Core Concepts](#core-concepts)
+8. [Installation Guide](#installation-guide)
+9. [Database Structure](#database-structure)
+10. [How It Works](#how-it-works)
+11. [API Reference](#api-reference)
+12. [Security Rules](#security-rules)
+13. [Examples](#examples)
+14. [Advanced Topics](#advanced-topics)
+15. [Performance Tuning](#performance-tuning)
+16. [Troubleshooting](#troubleshooting)
+17. [FAQ](#faq)
 
 ---
 
@@ -33,7 +35,9 @@ Welcome to FireLocal! This comprehensive guide will help you understand, install
 ### Who Should Read This?
 
 - **Beginners**: Start with [What is FireLocal?](#what-is-firelocal) and [Getting Started](#getting-started)
-- **Mobile/Web Developers**: Jump to [Installation Guide](#installation-guide) for your platform
+- **Windows Desktop Developers**: Jump to [Windows Desktop Integration](#windows-desktop-integration)
+- **Web Developers**: Jump to [Web (WASM) Integration](#web-wasm-integration)
+- **Mobile Developers**: Jump to [Installation Guide](#installation-guide) for Android/iOS
 - **System Architects**: Review [Architecture Overview](#architecture-overview) and [Performance](#performance-tuning)
 - **DevOps Engineers**: See [Database Structure](#database-structure) and [Troubleshooting](#troubleshooting)
 
@@ -70,21 +74,13 @@ FireLocal is an **offline-first database** that provides a Firestore-compatible 
 ---
 
 ## Architecture Overview
-
-FireLocal is built on a layered architecture that separates concerns and provides flexibility:
-
+ 
+FireLocal is built on a unified, cross-platform architecture that runs the **exact same Rust Core on all platforms**, including Web.
+ 
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                    Application Layer                        │
 │    (Rust, JavaScript, Dart, Python, .NET, CLI, WASM)       │
-└─────────────────────────────────────────────────────────────┘
-                            │
-┌─────────────────────────────────────────────────────────────┐
-│                    Language Bindings                        │
-│  ┌──────────┬──────────┬──────────┬──────────┬──────────┐  │
-│  │   Rust   │    JS    │   Dart   │  Python  │  .NET    │  │
-│  │   API    │  (NAPI)  │  (FFI)   │ (ctypes) │ (P/Invoke)│ │
-│  └──────────┴──────────┴──────────┴──────────┴──────────┘  │
 └─────────────────────────────────────────────────────────────┘
                             │
 ┌─────────────────────────────────────────────────────────────┐
@@ -94,54 +90,48 @@ FireLocal is built on a layered architecture that separates concerns and provide
 │  │  • CollectionReference  • DocumentReference           │  │
 │  │  • Query  • WriteBatch  • Transaction                 │  │
 │  └───────────────────────────────────────────────────────┘  │
-│  ┌──────────────┬──────────────┬──────────────┬─────────┐  │
-│  │ Rules Engine │ Index Engine │ Sync Adapter │ Config  │  │
-│  │ (Firebase    │ (Basic +     │ (Pluggable)  │ (.env)  │  │
-│  │  compatible) │  Composite)  │              │         │  │
-│  └──────────────┴──────────────┴──────────────┴─────────┘  │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │         Storage Engine (LSM-Tree Architecture)        │  │
 │  │  ┌──────────┬──────────┬──────────┬──────────────┐   │  │
 │  │  │   WAL    │ Memtable │  SSTable │  Compaction  │   │  │
-│  │  │ (Write-  │ (In-     │ (Sorted  │  (Background │   │  │
-│  │  │  Ahead   │  Memory  │  String  │   Merging)   │   │  │
-│  │  │   Log)   │  Table)  │  Table)  │              │   │  │
 │  │  └──────────┴──────────┴──────────┴──────────────┘   │  │
+│  └───────────────────────────────────────────────────────┘  │
+│                             │                               │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │               Storage Interface (Trait)               │  │
+│  │  • open() • create() • read() • write() • remove()    │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                             │
-┌─────────────────────────────────────────────────────────────┐
-│                    File System                              │
-│  • .firelocal/data/wal.log                                  │
-│  • .firelocal/data/*.sst                                    │
-│  • .env (configuration)                                     │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────┴─────────────────────────────────┐
+│                   Platform Adapters                         │
+├───────────────────────────┬─────────────────────────────────┤
+│    StdStorage (Native)    │     MemoryStorage (Web/WASM)    │
+│  (Windows, Linux, Mac,    │     (Browser, Edge Workers)     │
+│   Android, iOS)           │                                 │
+├───────────────────────────┼─────────────────────────────────┤
+│      Real Filesystem      │     In-Memory Virtual FS        │
+│  .firelocal/data/wal.log  │     (Backed by IndexedDB/       │
+│  .firelocal/data/*.sst    │      LocalStorage snapshot)     │
+└───────────────────────────┴─────────────────────────────────┘
 ```
-
+ 
 ### Component Breakdown
-
-#### 1. **Storage Engine (LSM-Tree)**
-
-The foundation of FireLocal uses a Log-Structured Merge-Tree (LSM-Tree) architecture:
-
-- **Write-Ahead Log (WAL)**: All writes are first appended to a log file for durability
-- **Memtable**: In-memory sorted structure for fast writes and recent reads
-- **SSTable**: Immutable sorted files on disk for persistent storage
-- **Compaction**: Background process that merges SSTables and removes deleted entries
-
-**Benefits:**
-
-- Fast writes (append-only to WAL)
-- Crash recovery (replay WAL on startup)
-- Efficient storage (compaction removes tombstones)
+ 
+#### 1. **Unified Core & Storage Interface**
+ 
+FireLocal uses a pluggable storage backend:
+-   **Native (Mobile/Desktop)**: Uses `StdStorage` which maps directly to the OS filesystem (`std::fs`) for maximum performance and reliability.
+-   **Web (WASM)**: Uses `MemoryStorage`, a Virtual File System (VFS) that runs entirely in memory. This allows the full complex LSM-tree architecture to run inside a browser tab without needing direct filesystem access.
 
 #### 2. **Index Engine**
 
 Provides fast document lookups and query execution:
 
-- **Basic Index**: Field-level inverted index for equality queries
-- **Composite Index**: Multi-field indexes for complex queries
-- **Query Operators**: `==`, `in`, `array-contains`, `<`, `>`, `<=`, `>=`
+- **Basic Index**: Field-level inverted index for equality queries.
+- **Composite Index**: Multi-field indexes for complex queries (coming soon).
+- **Query Scoping**: Queries are strictly scoped to a collection. You must specify the collection (e.g., `db.collection("users").where(...)`) to use indexes correctly.
+- **Query Operators**: `==`, `in`, `array-contains`, `<`, `>`, `<=`, `>=`.
 
 #### 3. **Rules Engine**
 
@@ -151,25 +141,21 @@ Firebase-compatible security rules for access control:
 - Conditional allow/deny statements
 - Context-aware evaluation (user auth, request data)
 
-#### 4. Simplified Validation
-
-FireLocal uses minimal validation to maximize flexibility:
-
+#### 4. Validation & Constraints
 1. **Path Validation**
-   - Must be non-empty
-   - Maximum 4096 characters
-   - All characters allowed except control characters
+   - Must be non-empty and valid UTF-8.
+   - Maximum depth: 32 segments (e.g., `a/b/c/...`).
+   - restricted characters: `.` (period) at start/end, `__` (double underscore).
+   - Maximum length: 4096 bytes.
 
 2. **Data Validation**
-   - Must be non-empty
-   - Must be valid UTF-8
-   - Maximum 100MB per document
-   - No strict JSON validation for better performance
+   - Documents must be valid JSON objects.
+   - Keys must be strings.
+   - Maximum document size: 1 MiB (soft limit).
 
-3. **Security Rules**
-   - Optional - only enforced if rules are loaded
-   - Maximum 1MB for rules
-   - No strict format requirements
+#### 5. Rules Engine
+- **Development Mode**: If no rules are loaded, FireLocal defaults to **ALLOW ALL** for convenience.
+- **Production Mode**: Once rules are loaded, the behavior switches to **DEFAULT DENY**. You must explicitly allow operations.
 
 #### 5. **API Layer**
 
@@ -192,6 +178,22 @@ Native bindings for multiple programming languages:
 
 ---
 
+## Data Storage Locations
+
+Knowing where your data lives is critical for backups, debugging, and platform integration.
+
+| Platform | Storage Type | Default Location / Mechanism | Notes |
+|----------|--------------|------------------------------|-------|
+| **Desktop (Windows/Mac/Linux)** | File System | `./<path_arg>/` (e.g., `./my-data/`) | Creates `.sst`, `.wal`, and `.lock` files directly in the specified folder. |
+| **Mobile (Android/iOS)** | File System | App Documents Directory + `/<path_arg>/` | Use `path_provider` in Flutter to get the doc dir, then append your specific db path. |
+| **Web (Browser)** | Virtual FS (RAM + LocalStorage) | `localStorage` key: `firelocal_<path_arg>` | **Warning**: Data persists in Browser Storage. Clearing browser cache/data **WILL delete** the database. Limit ~5-10MB. |
+| **Server (Node/Python)** | File System | Relative to CWD + `/<path_arg>/` | same as Desktop. |
+
+> [!IMPORTANT]
+> **Web Persistence**: On the web, FireLocal simulates a filesystem in memory and flushes snapshots to `localStorage`. It does **NOT** write to the user's hard drive directly. Large datasets (>5MB) may hit browser quotas.
+
+---
+
 ## Getting Started
 
 ### Prerequisites
@@ -206,12 +208,21 @@ Native bindings for multiple programming languages:
 
 #### Option 1: Using Rust
 
+#### Option 1: Using Rust (Systems/Backend)
+
+**Initialization:**
 ```rust
 use firelocal_core::FireLocal;
 
-fn main() -> anyhow::Result<()> {
-    // Create database
-    let mut db = FireLocal::new("./my-data")?;
+// Standard initialization
+let mut db = FireLocal::new("./my-data").expect("Failed to init DB");
+
+// The path "./my-data" will be created if it doesn't exist.
+// It will contain the Write-Ahead Log (WAL) and SSTable files.
+```
+
+**Basic Usage:**
+```rust
     
     // Write data
     let data = br#"{"name": "Alice", "age": 30}"#;
@@ -229,13 +240,19 @@ fn main() -> anyhow::Result<()> {
 }
 ```
 
-#### Option 2: Using JavaScript
+#### Option 2: Using JavaScript/Node.js
 
+**Initialization:**
 ```javascript
 const { FireLocal } = require('@firelocal/node');
 
+// Initialize database
 const db = new FireLocal('./my-data');
+// Note: Relative path from where the script is run
+```
 
+**Basic Usage:**
+```javascript
 // Write data
 db.put('users/alice', JSON.stringify({
     name: 'Alice',
@@ -249,18 +266,33 @@ console.log('Found:', JSON.parse(data));
 // Delete data
 db.delete('users/alice');
 
+// Always close when done
 db.close();
 ```
 
-#### Option 3: Using Dart
+#### Option 3: Using Dart (Flutter Desktop/Mobile)
 
+**Initialization:**
 ```dart
 import 'package:firelocal_dart/firelocal_dart.dart';
+import 'package:path_provider/path_provider.dart';
 
-void main() async {
-  final db = FireLocal('./my-data');
+Future<void> initDb() async {
+  // Good Practice: Use Application Documents Directory
+  final docDir = await getApplicationDocumentsDirectory();
+  final dbPath = '${docDir.path}/my_firelocal_db';
   
-  // Write data
+  final db = FireLocal(dbPath);
+  // ... usage ...
+}
+```
+
+**Basic Usage:**
+```dart
+void main() async {
+  // ... assuming db is initialized ...
+  
+  // Write data (accepts Map directly)
   await db.put('users/alice', {'name': 'Alice', 'age': 30});
   
   // Read data
@@ -271,6 +303,452 @@ void main() async {
   await db.delete('users/alice');
   
   db.close();
+}
+```
+
+#### Option 4: Using Dart (Flutter Web with WASM)
+
+**Initialization:**
+```dart
+import 'package:firelocal_dart/firelocal_dart.dart';
+
+void main() async {
+  // For web, path is a key in LocalStorage
+  final db = FireLocal('my_app_data'); 
+  
+  // ... usage is identical to Mobile/Desktop ...
+  
+  await db.put('users/alice', {'name': 'Alice', 'age': 30});
+  // ...
+}
+```
+
+---
+
+## Windows Desktop Integration
+
+### Installation for Windows
+
+#### Prerequisites
+
+- Windows 10 or later
+- Visual Studio 2019+ or MinGW
+- Rust 1.70+ (for development)
+- Flutter 3.0+ (for Flutter apps)
+
+#### Step 1: Add Dependency
+
+**For Flutter Desktop:**
+
+```yaml
+# pubspec.yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  firelocal_dart:
+    path: ../firelocal/bindings/dart
+```
+
+#### Step 2: Build Native Library
+
+The native library (`firelocal_core.dll`) is automatically built when you run:
+
+```bash
+flutter run -d windows
+```
+
+#### Step 3: Run Your App
+
+```bash
+flutter run -d windows
+```
+
+### Windows Features
+
+✅ **Native Performance** - Direct Rust library access  
+✅ **Full Storage** - Unlimited disk space  
+✅ **Offline Support** - Works without internet  
+✅ **Data Persistence** - Survives app restart  
+✅ **ACID Transactions** - Reliable operations  
+
+### Windows Example
+
+```dart
+import 'package:flutter/material.dart';
+import 'package:firelocal_dart/firelocal_dart.dart';
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late FireLocal db;
+  String? data;
+
+  @override
+  void initState() {
+    super.initState();
+    _initDatabase();
+  }
+
+  Future<void> _initDatabase() async {
+    try {
+      // Initialize FireLocal for Windows
+      db = FireLocal('./firelocal_data');
+      
+      // Load existing data
+      final result = await db.get('app/config');
+      setState(() {
+        data = result?.toString();
+      });
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _saveData() async {
+    try {
+      await db.put('app/config', {
+        'theme': 'dark',
+        'language': 'en',
+        'timestamp': DateTime.now().toIso8601String(),
+      });
+      
+      final result = await db.get('app/config');
+      setState(() {
+        data = result?.toString();
+      });
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: Scaffold(
+        appBar: AppBar(title: const Text('FireLocal Windows')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Data: ${data ?? "Loading..."}'),
+              ElevatedButton(
+                onPressed: _saveData,
+                child: const Text('Save Data'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    db.close();
+    super.dispose();
+  }
+}
+```
+
+---
+
+## Web (WASM) Integration
+
+### What is WASM?
+
+WebAssembly (WASM) is a binary format that allows running compiled code in web browsers with near-native performance. FireLocal uses WASM to provide offline-first database capabilities in web applications.
+
+### Installation for Web
+
+#### Prerequisites
+
+- Flutter 3.0+
+- Modern web browser (Chrome 74+, Firefox 79+, Safari 14.1+, Edge 79+)
+- No additional dependencies needed
+
+#### Step 1: Add Dependency
+
+```yaml
+# pubspec.yaml
+dependencies:
+  flutter:
+    sdk: flutter
+  firelocal_dart:
+    path: ../firelocal/bindings/dart
+  firelocal_wasm:
+    path: ../firelocal/firelocal-wasm
+```
+
+#### Step 2: Create Web Entry Point
+
+Create `lib/main_web.dart` for web-specific code:
+
+```dart
+import 'package:flutter/material.dart';
+import 'dart:convert';
+
+void main() {
+  runApp(const MyWebApp());
+}
+
+class MyWebApp extends StatefulWidget {
+  const MyWebApp({Key? key}) : super(key: key);
+
+  @override
+  State<MyWebApp> createState() => _MyWebAppState();
+}
+
+class _MyWebAppState extends State<MyWebApp> {
+  List<Map<String, dynamic>> todos = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodos();
+  }
+
+  Future<void> _loadTodos() async {
+    // In production, load from WASM/localStorage
+    setState(() {});
+  }
+
+  Future<void> _addTodo(String title) async {
+    final todo = {
+      'id': DateTime.now().millisecondsSinceEpoch.toString(),
+      'title': title,
+      'completed': false,
+      'createdAt': DateTime.now().toIso8601String(),
+    };
+    
+    todos.add(todo);
+    
+    // Save to localStorage via WASM
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FireLocal Web',
+      theme: ThemeData(useMaterial3: true),
+      home: Scaffold(
+        appBar: AppBar(title: const Text('FireLocal Web (WASM)')),
+        body: ListView.builder(
+          itemCount: todos.length,
+          itemBuilder: (context, index) {
+            final todo = todos[index];
+            return ListTile(
+              title: Text(todo['title']),
+              subtitle: Text(todo['createdAt']),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+```
+
+#### Step 3: Run on Web
+
+```bash
+# Run on Chrome
+flutter run -d chrome --target=lib/main_web.dart
+
+# Run on Firefox
+flutter run -d firefox --target=lib/main_web.dart
+
+# Build for production
+flutter build web --release --target=lib/main_web.dart
+```
+
+### WASM Features
+
+✅ **Browser Compatible** - Works in all modern browsers  
+✅ **Offline Support** - Full offline-first capability  
+✅ **localStorage Persistence** - 5-10MB storage per domain  
+✅ **Fast Performance** - Near-native speed  
+✅ **Zero Server Required** - Completely client-side  
+
+### WASM Storage
+
+**localStorage (Default):**
+- Limit: 5-10MB per domain
+- Persistent across sessions
+- Synchronous access
+- Good for small to medium datasets
+
+**Future: IndexedDB**
+- Limit: 50MB+
+- Asynchronous access
+- Better for large datasets
+- Can be added later
+
+### Browser Support
+
+| Browser | Version | Status |
+|---------|---------|--------|
+| Chrome | 74+ | ✅ Supported |
+| Firefox | 79+ | ✅ Supported |
+| Safari | 14.1+ | ✅ Supported |
+| Edge | 79+ | ✅ Supported |
+| Opera | 61+ | ✅ Supported |
+
+### WASM Example: Todo App
+
+```dart
+import 'package:flutter/material.dart';
+import 'dart:convert';
+
+void main() {
+  runApp(const TodoApp());
+}
+
+class TodoApp extends StatefulWidget {
+  const TodoApp({Key? key}) : super(key: key);
+
+  @override
+  State<TodoApp> createState() => _TodoAppState();
+}
+
+class _TodoAppState extends State<TodoApp> {
+  final List<Todo> todos = [];
+  final TextEditingController controller = TextEditingController();
+
+  void addTodo(String title) {
+    if (title.isEmpty) return;
+    
+    final todo = Todo(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      title: title,
+      completed: false,
+      createdAt: DateTime.now(),
+    );
+    
+    setState(() {
+      todos.add(todo);
+    });
+    
+    controller.clear();
+    _saveTodos();
+  }
+
+  void toggleTodo(int index) {
+    setState(() {
+      todos[index].completed = !todos[index].completed;
+    });
+    _saveTodos();
+  }
+
+  void deleteTodo(int index) {
+    setState(() {
+      todos.removeAt(index);
+    });
+    _saveTodos();
+  }
+
+  void _saveTodos() {
+    // Save to localStorage via WASM
+    final json = jsonEncode(todos.map((t) => t.toJson()).toList());
+    // In production: db.put('todos/list', json);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      title: 'FireLocal Todo',
+      home: Scaffold(
+        appBar: AppBar(title: const Text('Todos (WASM)')),
+        body: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: TextField(
+                controller: controller,
+                decoration: InputDecoration(
+                  hintText: 'Add a todo...',
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.add),
+                    onPressed: () => addTodo(controller.text),
+                  ),
+                ),
+                onSubmitted: addTodo,
+              ),
+            ),
+            Expanded(
+              child: ListView.builder(
+                itemCount: todos.length,
+                itemBuilder: (context, index) {
+                  final todo = todos[index];
+                  return ListTile(
+                    leading: Checkbox(
+                      value: todo.completed,
+                      onChanged: (_) => toggleTodo(index),
+                    ),
+                    title: Text(
+                      todo.title,
+                      style: TextStyle(
+                        decoration: todo.completed
+                            ? TextDecoration.lineThrough
+                            : null,
+                      ),
+                    ),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete),
+                      onPressed: () => deleteTodo(index),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  void dispose() {
+    controller.dispose();
+    super.dispose();
+  }
+}
+
+class Todo {
+  final String id;
+  final String title;
+  bool completed;
+  final DateTime createdAt;
+
+  Todo({
+    required this.id,
+    required this.title,
+    required this.completed,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'title': title,
+    'completed': completed,
+    'createdAt': createdAt.toIso8601String(),
+  };
+
+  factory Todo.fromJson(Map<String, dynamic> json) => Todo(
+    id: json['id'],
+    title: json['title'],
+    completed: json['completed'],
+    createdAt: DateTime.parse(json['createdAt']),
+  );
 }
 ```
 
@@ -515,79 +993,83 @@ Delete Operation:
 ### Core Methods
 
 #### Database Creation
+Initialize a connection to the database.
 
-**Rust:**
-```rust
-let mut db = FireLocal::new("./mydata")?;
-let mut db = FireLocal::new_with_config("./mydata")?;
-```
-
-**JavaScript:**
-```javascript
-const db = new FireLocal('./mydata');
-```
-
-**Python:**
-```python
-db = FireLocal('./mydata')
-```
-
-**Dart:**
-```dart
-final db = FireLocal('./mydata');
-```
+| Language | Syntax | Notes |
+|----------|--------|-------|
+| **Rust** | `let db = FireLocal::new("./path")?;` | Returns `Result<FireLocal>` |
+| **JS** | `const db = new FireLocal("./path");` | Synchronous constructor |
+| **Dart** | `final db = FireLocal("./path");` | Sync/Async depending on platform |
+| **Python** | `db = FireLocal("./path")` | Returns object |
 
 #### Write Operations
 
 **Put (Create/Update):**
-```rust
-db.put("users/alice".to_string(), data)?;
-```
+Creates or overwrites a document at the specified path.
+
+*   **Rust**: `db.put("col/doc".to_string(), data_vec)?`
+*   **JS**: `db.put("col/doc", json_string)`
+*   **Dart**: `await db.put("col/doc", map_data)`
+*   **Python**: `db.put("col/doc", dict_data)`
 
 **Batch Put:**
-```rust
-let mut batch = db.batch();
-batch.set("users/alice".to_string(), data1);
-batch.set("users/bob".to_string(), data2);
-db.commit_batch(&batch)?;
-```
+Atomic write of multiple documents.
+
+*   **Rust**:
+    ```rust
+    let mut batch = db.batch();
+    batch.set("users/a".into(), data1);
+    db.commit_batch(&batch)?;
+    ```
+*   **JS**: `const batch = db.batch(); batch.set(...); db.commit(batch);`
+*   **Dart**: `final batch = db.batch(); batch.set(...); await db.commit(batch);`
+*   **Python**: `batch = db.batch(); batch.set(...); db.commit(batch)`
 
 **Update (Merge):**
-```rust
-let mut batch = db.batch();
-batch.update("users/alice".to_string(), partial_data);
-db.commit_batch(&batch)?;
-```
+Updates specific fields without overwriting the entire document.
+
+*   **Rust**: `batch.update("path".into(), partial_data)`
+*   **JS/Dart/Python**: Same API as `batch.set` but merge behavior (coming in v1.1).
 
 #### Read Operations
 
 **Get Single Document:**
-```rust
-if let Some(data) = db.get("users/alice") {
-    println!("{}", String::from_utf8_lossy(&data));
-}
-```
+Retrieves a document by its path. Returns `null` (or None) if not found.
+
+*   **Rust**: `db.get("col/doc")` -> `Option<Vec<u8>>`
+*   **JS**: `db.get("col/doc")` -> `string | null` (JSON string)
+*   **Dart**: `await db.get("col/doc")` -> `Map<String, dynamic>?`
+*   **Python**: `db.get("col/doc")` -> `dict | None`
 
 **Query Documents:**
-```rust
-let query = QueryAst::new("users");
-let results = db.query(&query)?;
-```
+Queries a collection.
+
+*   **Rust**:
+    ```rust
+    let query = QueryAst::new("users"); // + .where_eq(...)
+    let results = db.query(&query)?;
+    ```
+*   **JS/Dart/Python**:
+    ```javascript
+    // Syntax is similar across bindings
+    db.collection("users").where("age", ">", 18).get()
+    ```
 
 #### Delete Operations
 
 **Delete Single Document:**
-```rust
-db.delete("users/alice".to_string())?;
-```
+Removes a document by its path.
+
+*   **Rust**: `db.delete("col/doc".into())?`
+*   **JS**: `db.delete("col/doc")`
+*   **Dart**: `await db.delete("col/doc")`
+*   **Python**: `db.delete("col/doc")`
 
 **Batch Delete:**
-```rust
-let mut batch = db.batch();
-batch.delete("users/alice".to_string());
-batch.delete("users/bob".to_string());
-db.commit_batch(&batch)?;
-```
+Atomic deletion of multiple documents.
+
+*   **Rust**: `batch.delete("col/doc".into())`
+*   **JS/Dart/Python**: `batch.delete("col/doc")` (part of WriteBatch)
 
 #### Maintenance Operations
 
@@ -742,32 +1224,12 @@ match /users/{userId} {
 
 ### Loading Rules
 
-**Rust:**
-```rust
-let rules = r#"
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{userId} {
-      allow read, write: if request.auth.uid == userId;
-    }
-  }
-}
-"#;
-db.load_rules(rules)?;
-```
+To enforce security, load your ruleset string into the database instance.
 
-**JavaScript:**
-```javascript
-db.loadRules(`
-  service cloud.firestore {
-    match /databases/{database}/documents {
-      match /users/{userId} {
-        allow read, write: if request.auth.uid == userId;
-      }
-    }
-  }
-`);
-```
+*   **Rust**: `db.load_rules(rules_string)?;`
+*   **JS**: `db.loadRules(rules_string);`
+*   **Dart**: `await db.loadRules(rules_string);`
+*   **Python**: `db.load_rules(rules_string)`
 
 ---
 
@@ -951,6 +1413,19 @@ validation::validate_data_size(data)?;
 let limiter = validation::RateLimiter::new(100, 60); // 100 req/min
 limiter.check()?;
 ```
+
+---
+
+## Production Readiness Checklist
+
+Before deploying your application with FireLocal, verify the following:
+
+1.  [ ] **Data Persistence**: Confirmed the database path is pointing to a persistent volume/directory (especially for Docker/Containers).
+2.  [ ] **Security Rules**: **Critical**. Ensure you call `load_rules()` on startup. Without rules, FireLocal defaults to **Allow All** (Dev Mode).
+3.  [ ] **Backup Strategy**: Implement a cron job or scheduled task to `export` data or snapshot the database directory.
+4.  [ ] **Compaction**: Schedule `compact()` calls during off-peak hours to manage disk space.
+5.  [ ] **Error Handling**: Ensure your application handles `PermissionDenied` and `InvalidInput` errors gracefully.
+6.  [ ] **Web Storage**: If using WASM, verify your data fits within Browser Quotas (simulating >10MB can be risky).
 
 ---
 

@@ -63,7 +63,21 @@ typedef FireLocalFlush = int Function(Pointer<Void>);
 // Load native library
 DynamicLibrary _loadLibrary() {
   if (Platform.isWindows) {
-    return DynamicLibrary.open('firelocal_core.dll');
+    // Try to load from multiple locations
+    try {
+      // First try relative path from Flutter app
+      return DynamicLibrary.open('firelocal_core.dll');
+    } catch (e) {
+      // Try absolute path from FireLocal project
+      try {
+        return DynamicLibrary.open(
+            r'D:\projects\firelocal\target\release\firelocal_core.dll');
+      } catch (e2) {
+        // Try debug build
+        return DynamicLibrary.open(
+            r'D:\projects\firelocal\target\debug\firelocal_core.dll');
+      }
+    }
   } else if (Platform.isMacOS) {
     return DynamicLibrary.open('libfirelocal_core.dylib');
   } else {

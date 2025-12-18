@@ -35,14 +35,10 @@ fn test_permission_denied_on_write() {
             }
         }
     "#;
-    db.load_rules(rules)
-        .expect("Failed to load rules");
+    db.load_rules(rules).expect("Failed to load rules");
 
     // Try to write - should fail
-    let result = db.put(
-        "users/alice".to_string(),
-        br#"{"name":"Alice"}"#.to_vec(),
-    );
+    let result = db.put("users/alice".to_string(), br#"{"name":"Alice"}"#.to_vec());
     assert!(result.is_err(), "Write should be denied by rules");
 
     // Cleanup
@@ -67,15 +63,11 @@ fn test_permission_denied_on_read() {
             }
         }
     "#;
-    db.load_rules(write_rules)
-        .expect("Failed to load rules");
+    db.load_rules(write_rules).expect("Failed to load rules");
 
     // Put a document
-    db.put(
-        "users/alice".to_string(),
-        br#"{"name":"Alice"}"#.to_vec(),
-    )
-    .expect("Failed to put document");
+    db.put("users/alice".to_string(), br#"{"name":"Alice"}"#.to_vec())
+        .expect("Failed to put document");
 
     // Now change rules to deny reads
     let read_rules = r#"
@@ -87,8 +79,7 @@ fn test_permission_denied_on_read() {
             }
         }
     "#;
-    db.load_rules(read_rules)
-        .expect("Failed to load rules");
+    db.load_rules(read_rules).expect("Failed to load rules");
 
     // Try to read - should return None (permission denied)
     let result = db.get("users/alice");
@@ -106,14 +97,10 @@ fn test_invalid_utf8_data() {
 
     let mut db = FireLocal::new(test_dir).expect("Failed to create database");
 
-    // Put invalid UTF-8 data
+    // Put invalid UTF-8 data - should fail
     let invalid_utf8 = vec![0xFF, 0xFE, 0xFD];
-    db.put("data/invalid".to_string(), invalid_utf8)
-        .expect("Failed to put invalid UTF-8");
-
-    // Should still be able to retrieve it
-    let retrieved = db.get("data/invalid");
-    assert!(retrieved.is_some(), "Should retrieve invalid UTF-8 data");
+    let result = db.put("data/invalid".to_string(), invalid_utf8);
+    assert!(result.is_err(), "Should fail to put invalid UTF-8 data");
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -145,7 +132,10 @@ fn test_delete_nonexistent_document() {
 
     // Delete nonexistent document - should succeed
     let result = db.delete("nonexistent/path".to_string());
-    assert!(result.is_ok(), "Deleting nonexistent document should succeed");
+    assert!(
+        result.is_ok(),
+        "Deleting nonexistent document should succeed"
+    );
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -169,15 +159,18 @@ fn test_batch_with_permission_denied() {
             }
         }
     "#;
-    db.load_rules(rules)
-        .expect("Failed to load rules");
+    db.load_rules(rules).expect("Failed to load rules");
 
     // Create batch with operations
-    let batch = db.batch();
+    let mut batch = db.batch();
+    batch.set("users/alice".to_string(), b"data".to_vec());
 
     // Commit should fail due to permissions
     let result = db.commit_batch(&batch);
-    assert!(result.is_err(), "Batch commit should fail due to permissions");
+    assert!(
+        result.is_err(),
+        "Batch commit should fail due to permissions"
+    );
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -211,13 +204,9 @@ fn test_very_long_path() {
     // Create very long path
     let long_path = "a/".repeat(100) + "document";
 
-    // Put with long path
+    // Put with long path - should fail due to depth limit
     let result = db.put(long_path.clone(), br#"{"data":"test"}"#.to_vec());
-    assert!(result.is_ok(), "Should handle long paths");
-
-    // Verify retrieval
-    let retrieved = db.get(&long_path);
-    assert!(retrieved.is_some(), "Should retrieve document with long path");
+    assert!(result.is_err(), "Should fail for path too deep");
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -232,11 +221,8 @@ fn test_concurrent_operations_same_document() {
     let mut db = FireLocal::new(test_dir).expect("Failed to create database");
 
     // Put initial document
-    db.put(
-        "counter".to_string(),
-        br#"{"value":0}"#.to_vec(),
-    )
-    .expect("Failed to put initial document");
+    db.put("counter".to_string(), br#"{"value":0}"#.to_vec())
+        .expect("Failed to put initial document");
 
     // Simulate multiple updates
     for i in 1..10 {
@@ -265,11 +251,8 @@ fn test_recovery_from_corrupted_wal() {
     // Create database and put data
     {
         let mut db = FireLocal::new(test_dir).expect("Failed to create database");
-        db.put(
-            "users/alice".to_string(),
-            br#"{"name":"Alice"}"#.to_vec(),
-        )
-        .expect("Failed to put document");
+        db.put("users/alice".to_string(), br#"{"name":"Alice"}"#.to_vec())
+            .expect("Failed to put document");
     }
 
     // Corrupt WAL file

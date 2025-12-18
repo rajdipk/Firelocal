@@ -1,0 +1,56 @@
+name: FireLocal CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-and-test:
+    name: Build & Test (Native)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, fmt
+
+      - name: Check Formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (Linting)
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Build Core
+        run: cargo build -p firelocal-core --verbose
+
+      - name: Test Core
+        run: cargo test -p firelocal-core --verbose
+
+      - name: Build CLI
+        run: cargo build -p firelocal-cli --verbose
+
+  build-wasm:
+    name: Build WASM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Build WASM Package
+        run: |
+          cd firelocal-wasm
+          wasm-pack build --target web

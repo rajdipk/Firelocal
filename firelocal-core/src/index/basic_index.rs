@@ -103,10 +103,9 @@ impl IndexProvider for BasicIndexProvider {
         // For now, only support Equal operator
         match &query_ast.operator {
             QueryOperator::Equal(value) => {
-                // Extract collection from field path if needed
-                // For simplicity, assume we're querying a single collection
-                // In a real implementation, we'd need collection context
-                self.query_equal("default", &query_ast.field, value)
+                // Extract collection from query AST
+                let collection = query_ast.collection.as_deref().unwrap_or("default");
+                self.query_equal(collection, &query_ast.field, value)
             }
             _ => {
                 // Other operators not yet implemented
