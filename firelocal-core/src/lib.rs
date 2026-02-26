@@ -1,12 +1,16 @@
 pub mod api;
 pub mod config;
 #[cfg(not(target_arch = "wasm32"))]
+pub mod error;
 pub mod ffi;
 pub mod field_value;
+pub mod health;
 pub mod index;
 pub mod listener;
+pub mod logging;
 pub mod model;
 pub mod rules;
+pub mod security;
 pub mod store;
 #[cfg(feature = "sync")]
 pub mod sync;
@@ -20,14 +24,14 @@ use crate::index::{IndexProvider, QueryAst};
 use crate::listener::{ListenerManager, SnapshotCallback};
 use crate::model::Document;
 use crate::rules::RulesEngine;
-use crate::store::compaction::{CompactionStats, Compactor};
+use crate::store::compaction::CompactionStats;
 use crate::store::io::{StdStorage, Storage};
 use crate::store::memtable::Memtable;
 use crate::store::sst::{SstBuilder, SstReader, SstSearchResult};
 use crate::store::wal::WriteAheadLog;
 #[cfg(all(feature = "sync", not(target_arch = "wasm32")))]
 use crate::sync::{MockRemoteStore, RemoteStore, SyncManager};
-use crate::transaction::{execute_batch_operation, Transaction, WriteBatch};
+use crate::transaction::{execute_batch_operation, WriteBatch};
 use anyhow::Result;
 use std::collections::HashMap;
 use std::io;
@@ -46,6 +50,7 @@ pub struct FireLocal<S: Storage = StdStorage> {
     #[cfg(feature = "sync")]
     sync: SyncManager,
     config: Option<FireLocalConfig>,
+    #[allow(dead_code)]
     document_versions: HashMap<String, u64>,
 }
 
@@ -57,8 +62,7 @@ impl FireLocal<StdStorage> {
     /// Create a new FireLocal instance with configuration
     pub fn new_with_config(path: impl Into<PathBuf>) -> io::Result<Self> {
         let path_buf = path.into();
-        let config = FireLocalConfig::load_or_create(Some(&path_buf))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+        let config = FireLocalConfig::load_or_create(Some(&path_buf)).map_err(io::Error::other)?;
 
         let mut instance = Self::new(&path_buf)?;
         instance.config = Some(config);
@@ -82,59 +86,57 @@ impl<S: Storage> FireLocal<S> {
 
         // Replay WAL
         if let Ok(iter) = wal.iter() {
-            for entry_res in iter {
-                if let Ok(entry) = entry_res {
-                    if entry.is_empty() {
+            for entry in iter.flatten() {
+                if entry.is_empty() {
+                    continue;
+                }
+                let op = entry[0];
+                if entry.len() < 5 {
+                    continue;
+                }
+                let k_len = match entry[1..5].try_into() {
+                    Ok(bytes) => u32::from_le_bytes(bytes) as usize,
+                    Err(_) => {
+                        eprintln!("Invalid WAL entry format: key length bytes");
                         continue;
                     }
-                    let op = entry[0];
-                    if entry.len() < 5 {
+                };
+                if entry.len() < 5 + k_len {
+                    continue;
+                }
+                let key = String::from_utf8_lossy(&entry[5..5 + k_len]).to_string();
+
+                if op == 0 {
+                    // Put
+                    if entry.len() < 5 + k_len + 4 {
                         continue;
                     }
-                    let k_len = match entry[1..5].try_into() {
+                    let v_len_offset = 5 + k_len;
+                    let v_len = match entry[v_len_offset..v_len_offset + 4].try_into() {
                         Ok(bytes) => u32::from_le_bytes(bytes) as usize,
                         Err(_) => {
-                            eprintln!("Invalid WAL entry format: key length bytes");
+                            eprintln!("Invalid WAL entry format: value length bytes");
                             continue;
                         }
                     };
-                    if entry.len() < 5 + k_len {
+                    if entry.len() < v_len_offset + 4 + v_len {
                         continue;
                     }
-                    let key = String::from_utf8_lossy(&entry[5..5 + k_len]).to_string();
+                    let value = entry[v_len_offset + 4..v_len_offset + 4 + v_len].to_vec();
 
-                    if op == 0 {
-                        // Put
-                        if entry.len() < 5 + k_len + 4 {
-                            continue;
-                        }
-                        let v_len_offset = 5 + k_len;
-                        let v_len = match entry[v_len_offset..v_len_offset + 4].try_into() {
-                            Ok(bytes) => u32::from_le_bytes(bytes) as usize,
-                            Err(_) => {
-                                eprintln!("Invalid WAL entry format: value length bytes");
-                                continue;
-                            }
-                        };
-                        if entry.len() < v_len_offset + 4 + v_len {
-                            continue;
-                        }
-                        let value = entry[v_len_offset + 4..v_len_offset + 4 + v_len].to_vec();
+                    memtable.put(key.clone(), value);
 
-                        memtable.put(key.clone(), value);
-
-                        if let Ok(json_str) =
-                            std::str::from_utf8(&entry[v_len_offset + 4..v_len_offset + 4 + v_len])
-                        {
-                            if let Ok(doc) = Document::from_json(json_str) {
-                                let _ = index.on_put(&doc.path, &doc);
-                            }
+                    if let Ok(json_str) =
+                        std::str::from_utf8(&entry[v_len_offset + 4..v_len_offset + 4 + v_len])
+                    {
+                        if let Ok(doc) = Document::from_json(json_str) {
+                            let _ = index.on_put(&doc.path, &doc);
                         }
-                    } else if op == 1 {
-                        // Delete
-                        memtable.delete(key.clone());
-                        let _ = index.on_delete(&key);
                     }
+                } else if op == 1 {
+                    // Delete
+                    memtable.delete(key.clone());
+                    let _ = index.on_delete(&key);
                 }
             }
         }
@@ -272,10 +274,7 @@ impl<S: Storage> FireLocal<S> {
     pub fn delete(&mut self, key: String) -> io::Result<()> {
         validation::validate_path(&key)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))?;
-        if let Err(e) = self.check_rules(&key, "write") {
-            // println!("Delete rule check failed: {}", e);
-            return Err(e);
-        }
+        self.check_rules(&key, "write")?;
         let _ = self.index.on_delete(&key);
 
         let mut entry = Vec::new();
@@ -323,7 +322,7 @@ impl<S: Storage> FireLocal<S> {
         let paths = self
             .index
             .query(q)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .map_err(|e| io::Error::other(e.to_string()))?;
 
         let mut docs = Vec::new();
         for path in paths {
@@ -362,9 +361,7 @@ impl<S: Storage> FireLocal<S> {
         if let Some(bytes) = self.get(key) {
             if let Ok(s) = std::str::from_utf8(&bytes) {
                 if let Ok(doc) = Document::from_json(s) {
-                    self.sync
-                        .push(&doc)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
+                    self.sync.push(&doc).map_err(io::Error::other)?;
                     return Ok(());
                 }
             }
@@ -377,11 +374,7 @@ impl<S: Storage> FireLocal<S> {
 
     #[cfg(feature = "sync")]
     pub fn sync_pull(&mut self, key: &str) -> io::Result<()> {
-        if let Ok(Some(doc)) = self
-            .sync
-            .pull(key)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-        {
+        if let Ok(Some(doc)) = self.sync.pull(key).map_err(io::Error::other) {
             // We pulled a doc. Write it to local.
             // Bypass check_rules? "Admin" action? Or enforce "write"?
             // Syncing usually implies authoritative source, so maybe bypass?

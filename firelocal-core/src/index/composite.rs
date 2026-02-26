@@ -26,7 +26,7 @@ impl CompositeIndex {
 
         self.entries
             .entry(key)
-            .or_insert_with(HashSet::new)
+            .or_default()
             .insert(doc.path.clone());
     }
 

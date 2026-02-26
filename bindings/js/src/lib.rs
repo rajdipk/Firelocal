@@ -105,7 +105,7 @@ impl FireLocal {
             .lock()
             .map_err(|_| Error::new(Status::GenericFailure, "Lock error".to_string()))?;
 
-        db.commit_batch(&*batch_inner)
+        db.commit_batch(&batch_inner)
             .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))
     }
 
@@ -202,7 +202,7 @@ pub fn increment(n: i64) -> String {
 pub fn array_union(elements: Vec<String>) -> String {
     let values: Vec<serde_json::Value> = elements
         .into_iter()
-        .map(|s| serde_json::Value::String(s))
+        .map(serde_json::Value::String)
         .collect();
     serde_json::to_string(&firelocal_core::field_value::FieldValue::array_union(
         values,
@@ -214,7 +214,7 @@ pub fn array_union(elements: Vec<String>) -> String {
 pub fn array_remove(elements: Vec<String>) -> String {
     let values: Vec<serde_json::Value> = elements
         .into_iter()
-        .map(|s| serde_json::Value::String(s))
+        .map(serde_json::Value::String)
         .collect();
     serde_json::to_string(&firelocal_core::field_value::FieldValue::array_remove(
         values,

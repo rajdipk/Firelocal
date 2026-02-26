@@ -35,7 +35,7 @@ impl Memtable {
         self.size_approx += key.len(); // Tombstone size approximation
         self.map.insert(key, Entry::Delete);
     }
-    
+
     pub fn iter(&self) -> impl Iterator<Item = (&String, &Entry)> {
         self.map.iter()
     }
@@ -43,8 +43,14 @@ impl Memtable {
     pub fn len(&self) -> usize {
         self.map.len()
     }
-    
+
     pub fn is_empty(&self) -> bool {
         self.map.is_empty()
+    }
+}
+
+impl Default for Memtable {
+    fn default() -> Self {
+        Self::new()
     }
 }

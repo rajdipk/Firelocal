@@ -273,7 +273,7 @@ fn test_special_characters_in_path() {
 
     for path in &paths {
         db.put(path.to_string(), br#"{"data":"test"}"#.to_vec())
-            .expect(&format!("Failed to put document at {}", path));
+            .unwrap_or_else(|_| panic!("Failed to put document at {}", path));
     }
 
     // Verify all paths

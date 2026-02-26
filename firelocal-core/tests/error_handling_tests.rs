@@ -234,7 +234,7 @@ fn test_concurrent_operations_same_document() {
     // Verify final value
     let final_doc = db.get("counter").expect("Failed to get document");
     assert!(
-        final_doc.len() > 0,
+        !final_doc.is_empty(),
         "Document should exist after concurrent operations"
     );
 

@@ -1,6 +1,6 @@
-use firelocal_core::FireLocal;
 use firelocal_core::model::Document;
 use firelocal_core::sync::RemoteStore;
+use firelocal_core::FireLocal;
 use std::fs;
 use std::sync::{Arc, Mutex};
 

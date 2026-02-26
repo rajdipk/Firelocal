@@ -1,5 +1,5 @@
-use firelocal_core::FireLocal;
 use firelocal_core::api::CollectionReference;
+use firelocal_core::FireLocal;
 use serde_json::json;
 use std::fs;
 use std::sync::{Arc, Mutex};

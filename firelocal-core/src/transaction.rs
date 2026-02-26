@@ -1,7 +1,6 @@
 use crate::store::io::Storage;
-use crate::store::memtable::Memtable;
-use crate::store::wal::{WalEntry, WalOp, WriteAheadLog};
-use anyhow::{anyhow, Result};
+use crate::store::wal::{WalEntry, WriteAheadLog};
+use anyhow::Result;
 use std::collections::HashMap;
 use std::io;
 use uuid::Uuid;
@@ -140,10 +139,10 @@ impl Transaction {
             let current_version = get_current_version(path);
 
             if read_version != current_version {
-                return Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    format!("Transaction conflict: document {} was modified", path),
-                )
+                return Err(io::Error::other(format!(
+                    "Transaction conflict: document {} was modified",
+                    path
+                ))
                 .into());
             }
         }

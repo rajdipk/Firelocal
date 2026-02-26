@@ -15,6 +15,12 @@ pub struct ListenerManager {
     next_id: Arc<Mutex<u64>>,
 }
 
+impl Default for ListenerManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ListenerManager {
     pub fn new() -> Self {
         Self {

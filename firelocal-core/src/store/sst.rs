@@ -1,4 +1,4 @@
-use crate::store::io::{FileHandle, Storage};
+use crate::store::io::Storage;
 use crate::store::memtable::{Entry, Memtable};
 use std::io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;

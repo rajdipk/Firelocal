@@ -1,9 +1,23 @@
+#![allow(clippy::missing_safety_doc)]
+
 use crate::FireLocal;
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+/// # Safety
+/// 
+/// All FFI functions in this module are unsafe because they:
+/// - Dereference raw pointers passed from C code
+/// - Assume valid UTF-8 strings for C string parameters
+/// - Return raw pointers that must be properly freed by the caller
+/// 
+/// Callers must ensure:
+/// - All pointer arguments are non-null (unless explicitly allowed)
+/// - All string pointers point to valid, null-terminated UTF-8 strings
+/// - Returned strings are freed using the provided firelocal_free_string function
+/// - Database and batch pointers are not used after being freed
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_open(path: *const c_char) -> *mut FireLocal {
+pub unsafe extern "C" fn firelocal_open(path: *const c_char) -> *mut FireLocal {
     let c_str = unsafe { CStr::from_ptr(path) };
     let path_str = match c_str.to_str() {
         Ok(s) => s,
@@ -17,7 +31,7 @@ pub extern "C" fn firelocal_open(path: *const c_char) -> *mut FireLocal {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_destroy(db: *mut FireLocal) {
+pub unsafe extern "C" fn firelocal_destroy(db: *mut FireLocal) {
     if !db.is_null() {
         unsafe {
             drop(Box::from_raw(db));
@@ -26,7 +40,7 @@ pub extern "C" fn firelocal_destroy(db: *mut FireLocal) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_load_rules(db: *mut FireLocal, rules: *const c_char) -> i32 {
+pub unsafe extern "C" fn firelocal_load_rules(db: *mut FireLocal, rules: *const c_char) -> i32 {
     let db = unsafe {
         if db.is_null() {
             return -1;
@@ -42,7 +56,7 @@ pub extern "C" fn firelocal_load_rules(db: *mut FireLocal, rules: *const c_char)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_put_resource(
+pub unsafe extern "C" fn firelocal_put_resource(
     db: *mut FireLocal,
     key: *const c_char,
     val: *const c_char,
@@ -66,7 +80,10 @@ pub extern "C" fn firelocal_put_resource(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_get_resource(db: *mut FireLocal, key: *const c_char) -> *mut c_char {
+pub unsafe extern "C" fn firelocal_get_resource(
+    db: *mut FireLocal,
+    key: *const c_char,
+) -> *mut c_char {
     let db = unsafe {
         if db.is_null() {
             return std::ptr::null_mut();
@@ -87,7 +104,7 @@ pub extern "C" fn firelocal_get_resource(db: *mut FireLocal, key: *const c_char)
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_free_string(s: *mut c_char) {
+pub unsafe extern "C" fn firelocal_free_string(s: *mut c_char) {
     if !s.is_null() {
         unsafe {
             drop(CString::from_raw(s));
@@ -96,7 +113,7 @@ pub extern "C" fn firelocal_free_string(s: *mut c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_delete(db: *mut FireLocal, key: *const c_char) -> i32 {
+pub unsafe extern "C" fn firelocal_delete(db: *mut FireLocal, key: *const c_char) -> i32 {
     let db = unsafe {
         if db.is_null() {
             return -1;
@@ -115,7 +132,7 @@ pub extern "C" fn firelocal_delete(db: *mut FireLocal, key: *const c_char) -> i3
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_new(db: *mut FireLocal) -> *mut crate::transaction::WriteBatch {
+pub unsafe extern "C" fn firelocal_batch_new(db: *mut FireLocal) -> *mut crate::transaction::WriteBatch {
     let db = unsafe {
         if db.is_null() {
             return std::ptr::null_mut();
@@ -128,10 +145,10 @@ pub extern "C" fn firelocal_batch_new(db: *mut FireLocal) -> *mut crate::transac
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_set(
+pub unsafe extern "C" fn firelocal_batch_set(
     batch: *mut crate::transaction::WriteBatch,
-    path: *const c_char,
-    data: *const c_char,
+    key: *const c_char,
+    val: *const c_char,
 ) -> i32 {
     let batch = unsafe {
         if batch.is_null() {
@@ -140,17 +157,17 @@ pub extern "C" fn firelocal_batch_set(
         &mut *batch
     };
 
-    let path_str = unsafe { CStr::from_ptr(path) }
+    let path_str = unsafe { CStr::from_ptr(key) }
         .to_string_lossy()
         .into_owned();
-    let data_bytes = unsafe { CStr::from_ptr(data) }.to_bytes().to_vec();
+    let data_bytes = unsafe { CStr::from_ptr(val) }.to_bytes().to_vec();
 
     batch.set(path_str, data_bytes);
     0
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_update(
+pub unsafe extern "C" fn firelocal_batch_update(
     batch: *mut crate::transaction::WriteBatch,
     path: *const c_char,
     data: *const c_char,
@@ -172,7 +189,7 @@ pub extern "C" fn firelocal_batch_update(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_delete(
+pub unsafe extern "C" fn firelocal_batch_delete(
     batch: *mut crate::transaction::WriteBatch,
     path: *const c_char,
 ) -> i32 {
@@ -192,7 +209,7 @@ pub extern "C" fn firelocal_batch_delete(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_commit(
+pub unsafe extern "C" fn firelocal_batch_commit(
     db: *mut FireLocal,
     batch: *mut crate::transaction::WriteBatch,
 ) -> i32 {
@@ -217,7 +234,7 @@ pub extern "C" fn firelocal_batch_commit(
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_batch_free(batch: *mut crate::transaction::WriteBatch) {
+pub unsafe extern "C" fn firelocal_batch_free(batch: *mut crate::transaction::WriteBatch) {
     if !batch.is_null() {
         unsafe {
             drop(Box::from_raw(batch));
@@ -226,7 +243,7 @@ pub extern "C" fn firelocal_batch_free(batch: *mut crate::transaction::WriteBatc
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
+pub unsafe extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
     let db = unsafe {
         if db.is_null() {
             return std::ptr::null_mut();
@@ -234,8 +251,7 @@ pub extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
         &*db
     };
 
-    match db.compact() {
-        Ok(stats) => {
+    if let Ok(stats) = db.compact() {
             // Return JSON string with stats
             let json = format!(
                 r#"{{"files_before":{},"files_after":{},"entries_before":{},"entries_after":{},"tombstones_removed":{},"size_before":{},"size_after":{}}}"#,
@@ -251,13 +267,11 @@ pub extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
                 return c_str.into_raw();
             }
         }
-        Err(_) => {}
-    }
     std::ptr::null_mut()
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn firelocal_flush(db: *mut FireLocal) -> i32 {
+pub unsafe extern "C" fn firelocal_flush(db: *mut FireLocal) -> i32 {
     let db = unsafe {
         if db.is_null() {
             return -1;

@@ -192,20 +192,20 @@ impl Seek for MemFile {
             SeekFrom::End(p) => {
                 if p < 0 {
                     // simple check
-                    if (p.abs() as u64) > len {
+                    if p.unsigned_abs() > len {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
                             "Seek before start",
                         ));
                     }
-                    len - (p.abs() as u64)
+                    len - p.unsigned_abs()
                 } else {
                     len + (p as u64)
                 }
             }
             SeekFrom::Current(p) => {
                 if p < 0 {
-                    let abs_p = p.abs() as u64;
+                    let abs_p = p.unsigned_abs();
                     if abs_p > self.pos {
                         return Err(io::Error::new(
                             io::ErrorKind::InvalidInput,
@@ -227,6 +227,12 @@ impl Seek for MemFile {
 #[derive(Clone)]
 pub struct MemoryStorage {
     fs: MemFs,
+}
+
+impl Default for MemoryStorage {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MemoryStorage {

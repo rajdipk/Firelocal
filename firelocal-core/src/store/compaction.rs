@@ -1,5 +1,3 @@
-use crate::store::memtable::Memtable;
-use crate::store::sst::SstBuilder;
 use anyhow::Result;
 use std::collections::HashMap;
 use std::fs;
@@ -11,6 +9,7 @@ pub struct Compactor {
 }
 
 impl Compactor {
+    #[allow(dead_code)]
     pub fn new(data_dir: PathBuf) -> Self {
         Self { data_dir }
     }
@@ -22,6 +21,7 @@ impl Compactor {
         Ok(CompactionStats::default())
     }
 
+    #[allow(dead_code)]
     /// Find all SST files in the data directory
     fn find_sst_files(&self) -> Result<Vec<PathBuf>> {
         let mut sst_files = Vec::new();
@@ -50,6 +50,7 @@ impl Compactor {
 
     /// Merge data from multiple SST files
     /// Later entries override earlier ones (last-write-wins)
+    #[allow(dead_code)]
     fn merge_sst_files(&self, _files: &[PathBuf]) -> Result<HashMap<String, Option<Vec<u8>>>> {
         let merged = HashMap::new();
 
@@ -68,6 +69,7 @@ impl Compactor {
     }
 
     /// Calculate total size of SST files
+    #[allow(dead_code)]
     fn calculate_total_size(&self, files: &[PathBuf]) -> Result<u64> {
         let mut total = 0;
         for file in files {

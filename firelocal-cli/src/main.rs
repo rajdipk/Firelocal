@@ -130,7 +130,7 @@ fn main() -> Result<()> {
                 match readline {
                     Ok(line) => {
                         let _ = rl.add_history_entry(line.as_str());
-                        let parts: Vec<&str> = line.trim().split_whitespace().collect();
+                        let parts: Vec<&str> = line.split_whitespace().collect();
                         if parts.is_empty() {
                             continue;
                         }

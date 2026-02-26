@@ -1429,6 +1429,323 @@ Before deploying your application with FireLocal, verify the following:
 
 ---
 
+## Production Deployment
+
+FireLocal is enterprise-ready with comprehensive production deployment capabilities. This section covers deployment strategies, security configurations, monitoring, and operational best practices.
+
+### 🚀 Quick Production Setup
+
+#### 1. System Requirements
+
+**Minimum:**
+- CPU: 2 cores, RAM: 4GB, Storage: 10GB SSD
+- Rust 1.70+, OpenSSL dev libraries
+
+**Recommended:**
+- CPU: 4+ cores, RAM: 8GB+, Storage: 50GB+ SSD
+- Dedicated monitoring and backup systems
+
+#### 2. Installation
+
+```bash
+# Install from source
+cargo install --path . --root /opt/firelocal
+
+# Or download pre-built binaries
+wget https://github.com/firelocal/firelocal/releases/latest/firelocal-linux.tar.gz
+tar -xzf firelocal-linux.tar.gz -C /opt/firelocal
+```
+
+#### 3. Configuration
+
+Create `/etc/firelocal/config.toml`:
+
+```toml
+[database]
+data_path = "/var/lib/firelocal"
+max_document_size = 10485760  # 10MB
+memtable_threshold_mb = 64
+
+[security]
+authentication_enabled = true
+rate_limit_enabled = true
+max_requests_per_minute = 1000
+audit_logging_enabled = true
+
+[logging]
+level = "info"
+file_path = "/var/log/firelocal/firelocal.log"
+```
+
+#### 4. Service Setup
+
+```bash
+# Create firelocal user
+sudo useradd -r -s /bin/false firelocal
+
+# Setup directories
+sudo mkdir -p /var/lib/firelocal /var/log/firelocal /etc/firelocal
+sudo chown firelocal:firelocal /var/lib/firelocal /var/log/firelocal /etc/firelocal
+
+# Install systemd service
+sudo cp scripts/firelocal.service /etc/systemd/system/
+sudo systemctl enable firelocal
+sudo systemctl start firelocal
+```
+
+### 🔒 Security Configuration
+
+FireLocal includes enterprise-grade security features:
+
+#### Authentication & Authorization
+```rust
+use firelocal_core::security::{SecurityAuditor, SecurityContext};
+
+// Create security auditor
+let auditor = SecurityAuditor::new(security_config);
+
+// Check permissions
+let context = SecurityContext::authenticated("user123", vec!["reader".to_string()]);
+auditor.check_permission(&context, "read", "users/alice")?;
+```
+
+#### Rate Limiting
+```toml
+[security]
+rate_limit_enabled = true
+max_requests_per_minute = 1000
+blocked_ips = ["192.168.1.100"]
+```
+
+#### Input Sanitization
+- Path traversal protection
+- Prototype pollution prevention
+- JSON validation and sanitization
+- Size limits and depth validation
+
+### 📊 Monitoring & Observability
+
+#### Health Checks
+```bash
+curl http://localhost:9090/health
+```
+
+Response:
+```json
+{
+  "status": "healthy",
+  "uptime": 86400,
+  "checks": {
+    "database": {"status": "healthy"},
+    "storage": {"status": "healthy"},
+    "memory": {"status": "healthy"}
+  }
+}
+```
+
+#### Performance Metrics
+```bash
+curl http://localhost:9090/metrics
+```
+
+#### Logging Configuration
+```rust
+use firelocal_core::logging::{init_logging, LoggingConfig};
+
+let config = LoggingConfig {
+    level: "info".to_string(),
+    file_path: Some("/var/log/firelocal/firelocal.log".to_string()),
+    max_file_size: 10 * 1024 * 1024, // 10MB
+    max_files: 5,
+};
+
+init_logging(&config)?;
+```
+
+### 🐳 Docker Deployment
+
+```dockerfile
+FROM rust:1.70 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+COPY --from=builder /app/target/release/firelocal-server /usr/local/bin/
+EXPOSE 8080 8443 9090
+CMD ["firelocal-server", "--config", "/etc/firelocal/config.toml"]
+```
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  firelocal:
+    build: .
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    volumes:
+      - firelocal_data:/var/lib/firelocal
+      - ./config:/etc/firelocal
+    environment:
+      - FIRELOCAL_LOG_LEVEL=info
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9090/health"]
+      interval: 30s
+```
+
+### ☸️ Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firelocal
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: firelocal
+  template:
+    metadata:
+      labels:
+        app: firelocal
+    spec:
+      containers:
+      - name: firelocal
+        image: firelocal:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 9090
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 9090
+          initialDelaySeconds: 30
+          periodSeconds: 10
+```
+
+### 📈 Performance Optimization
+
+#### Configuration Tuning
+```toml
+[performance]
+memtable_threshold_mb = 128
+write_buffer_size_mb = 64
+block_cache_size_mb = 256
+wal_sync_mode = "normal"
+compaction_style = "universal"
+```
+
+#### Benchmarking
+```bash
+# Run performance benchmarks
+cargo bench --bench performance
+
+# Generate HTML report
+cargo bench --bench performance -- --output-format html
+```
+
+### 🔧 Operational Best Practices
+
+#### Backup Strategy
+```bash
+#!/bin/bash
+# Automated backup script
+BACKUP_DIR="/backup/firelocal"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Stop service for consistent backup
+systemctl stop firelocal
+
+# Backup data
+tar -czf "$BACKUP_DIR/$DATE/data.tar.gz" -C /var/lib/firelocal .
+
+# Start service
+systemctl start firelocal
+
+# Clean old backups
+find "$BACKUP_DIR" -type d -mtime +7 -exec rm -rf {} \;
+```
+
+#### Monitoring Setup
+- **Prometheus**: Metrics collection
+- **Grafana**: Visualization and alerting
+- **ELK Stack**: Log aggregation
+- **Jaeger**: Distributed tracing
+
+#### Security Hardening
+```bash
+# Firewall configuration
+ufw allow 8080/tcp  # HTTP API
+ufw allow 8443/tcp  # HTTPS API
+ufw allow 9090/tcp  # Health checks
+
+# SSL/TLS setup
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/firelocal/server.key \
+    -out /etc/firelocal/server.crt
+```
+
+### 🚨 Troubleshooting
+
+#### Common Issues
+
+**High Memory Usage:**
+```bash
+# Check memory usage
+ps aux | grep firelocal
+
+# Tune memory settings
+# Reduce memtable_threshold_mb in config
+```
+
+**Slow Performance:**
+```bash
+# Check I/O stats
+iostat -x 1
+
+# Monitor disk space
+df -h /var/lib/firelocal
+```
+
+**Connection Issues:**
+```bash
+# Check service status
+systemctl status firelocal
+
+# View logs
+journalctl -u firelocal -f
+```
+
+#### Debug Mode
+```bash
+# Enable debug logging
+export FIRELOCAL_LOG_LEVEL=debug
+systemctl restart firelocal
+```
+
+### 📚 Additional Resources
+
+- **Complete Deployment Guide**: See `DEPLOYMENT.md` for detailed instructions
+- **API Reference**: [API Documentation](#api-reference)
+- **Security Guide**: [Security Rules](#security-rules)
+- **Performance Tuning**: [Performance Guide](#performance-tuning)
+- **Troubleshooting**: [Troubleshooting](#troubleshooting)
+
+For enterprise support and consulting, contact enterprise@firelocal.dev
+
+---
+
 ## Performance Tuning
 
 ### Best Practices

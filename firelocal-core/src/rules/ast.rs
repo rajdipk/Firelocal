@@ -36,7 +36,7 @@ impl MatchBlock {
         &self,
         remaining_path: &str,
         operation: &str,
-        context: &HashMap<String, String>,
+        _context: &HashMap<String, String>,
     ) -> bool {
         // 1. Try to consume the current pattern from the remaining path
         if let Some(remainder) = self.consume_pattern(remaining_path) {
@@ -46,19 +46,18 @@ impl MatchBlock {
             let is_exact = remainder.trim_matches('/').is_empty();
             if is_exact {
                 for allow in &self.allow_statements {
-                    if allow.operations.contains(&operation.to_string())
-                        || allow.operations.contains(&"match_all".to_string())
+                    if (allow.operations.contains(&operation.to_string())
+                        || allow.operations.contains(&"match_all".to_string()))
+                        && allow.condition.trim() == "true"
                     {
-                        if allow.condition.trim() == "true" {
-                            return true;
-                        }
+                        return true;
                     }
                 }
             }
 
             // 3. Check sub-matches with the remainder
             for sub in &self.sub_matches {
-                if sub.matches_recursive(remainder, operation, context) {
+                if sub.matches_recursive(remainder, operation, _context) {
                     return true;
                 }
             }

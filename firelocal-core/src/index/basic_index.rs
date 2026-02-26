@@ -114,3 +114,9 @@ impl IndexProvider for BasicIndexProvider {
         }
     }
 }
+
+impl Default for BasicIndexProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}

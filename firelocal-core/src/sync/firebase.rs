@@ -32,6 +32,12 @@ impl FirebaseClient {
     }
 }
 
+impl Default for FirebaseClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RemoteStore for FirebaseClient {
     fn push(&self, doc: &Document) -> Result<(), String> {
         let url = format!("{}/{}", self.base_url(), doc.path);
@@ -116,9 +122,7 @@ fn map_from_firestore_json(
             if let Some(s) = obj.get("stringValue") {
                 out.insert(k.clone(), s.clone());
             } else if let Some(n) = obj.get("integerValue") {
-                let num = n.as_str()
-                    .and_then(|s| s.parse::<i64>().ok())
-                    .unwrap_or(0);
+                let num = n.as_str().and_then(|s| s.parse::<i64>().ok()).unwrap_or(0);
                 out.insert(k.clone(), serde_json::json!(num));
             } else if let Some(b) = obj.get("booleanValue") {
                 out.insert(k.clone(), b.clone());

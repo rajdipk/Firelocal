@@ -9,6 +9,12 @@ pub struct RulesEngine {
     ruleset: Option<Ruleset>,
 }
 
+impl Default for RulesEngine {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl RulesEngine {
     pub fn new() -> Self {
         Self { ruleset: None }
