@@ -71,7 +71,9 @@ impl From<FireLocalError> for io::Error {
         match err {
             FireLocalError::Io(msg) => io::Error::other(msg),
             FireLocalError::NotFound(msg) => io::Error::new(io::ErrorKind::NotFound, msg),
-            FireLocalError::PermissionDenied(msg) => io::Error::new(io::ErrorKind::PermissionDenied, msg),
+            FireLocalError::PermissionDenied(msg) => {
+                io::Error::new(io::ErrorKind::PermissionDenied, msg)
+            }
             FireLocalError::Validation(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
             FireLocalError::Corruption(msg) => io::Error::new(io::ErrorKind::InvalidData, msg),
             _ => io::Error::other(err.to_string()),
@@ -111,15 +113,15 @@ impl ErrorContext {
 
     pub fn build(self, error: FireLocalError) -> FireLocalError {
         let mut message = format!("{}: {}", self.operation, error);
-        
+
         if let Some(path) = &self.path {
             message = format!("{} (path: {})", message, path);
         }
-        
+
         if !self.details.is_empty() {
             message = format!("{} - {}", message, self.details.join(", "));
         }
-        
+
         match error {
             FireLocalError::Io(_) => FireLocalError::Io(message),
             FireLocalError::Validation(_) => FireLocalError::Validation(message),
@@ -142,9 +144,7 @@ impl ErrorContext {
 #[macro_export]
 macro_rules! error_context {
     ($operation:expr, $path:expr, $error:expr) => {
-        ErrorContext::new($operation)
-            .with_path($path)
-            .build($error)
+        ErrorContext::new($operation).with_path($path).build($error)
     };
     ($operation:expr, $error:expr) => {
         ErrorContext::new($operation).build($error)
@@ -207,7 +207,7 @@ where
     E: std::fmt::Display,
 {
     let mut delay = initial_delay_ms;
-    
+
     for attempt in 1..=max_attempts {
         match operation() {
             Ok(result) => return Ok(result),
@@ -215,15 +215,20 @@ where
                 if attempt == max_attempts {
                     return Err(e);
                 }
-                
-                log::warn!("Operation failed (attempt {}/{}): {}, retrying in {}ms", 
-                          attempt, max_attempts, e, delay);
+
+                log::warn!(
+                    "Operation failed (attempt {}/{}): {}, retrying in {}ms",
+                    attempt,
+                    max_attempts,
+                    e,
+                    delay
+                );
                 std::thread::sleep(std::time::Duration::from_millis(delay));
                 delay *= 2; // Exponential backoff
             }
         }
     }
-    
+
     unreachable!()
 }
 
@@ -238,7 +243,7 @@ mod tests {
             .with_path("users/invalid")
             .with_detail("contains special characters")
             .build(error);
-        
+
         assert!(matches!(context, FireLocalError::Validation(_)));
         assert!(context.to_string().contains("put"));
         assert!(context.to_string().contains("users/invalid"));
@@ -248,7 +253,7 @@ mod tests {
     fn test_error_conversions() {
         let io_error = io::Error::new(io::ErrorKind::NotFound, "file not found");
         let firelocal_error: FireLocalError = io_error.into();
-        
+
         assert!(matches!(firelocal_error, FireLocalError::Io(_)));
     }
 
@@ -256,18 +261,21 @@ mod tests {
     fn test_recovery_strategy() {
         let io_error = FireLocalError::Io("disk error".to_string());
         let strategy = get_recovery_strategy(&io_error);
-        
+
         match strategy {
-            RecoveryStrategy::Retry { max_attempts, delay_ms } => {
+            RecoveryStrategy::Retry {
+                max_attempts,
+                delay_ms,
+            } => {
                 assert_eq!(max_attempts, 3);
                 assert_eq!(delay_ms, 100);
             }
             _ => panic!("Expected retry strategy"),
         }
-        
+
         let validation_error = FireLocalError::Validation("invalid data".to_string());
         let strategy = get_recovery_strategy(&validation_error);
-        
+
         assert!(matches!(strategy, RecoveryStrategy::Abort));
     }
 
@@ -286,7 +294,7 @@ mod tests {
             3,
             10,
         );
-        
+
         assert_eq!(result.unwrap(), "success");
         assert_eq!(attempts, 3);
     }

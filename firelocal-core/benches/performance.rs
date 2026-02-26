@@ -10,12 +10,12 @@ fn bench_basic_operations(c: &mut Criterion) {
         b.iter(|| {
             let test_dir = format!("bench_put_{}", uuid::Uuid::new_v4());
             let mut db = FireLocal::new(&test_dir).unwrap();
-            
+
             let key = format!("users/user_{}", uuid::Uuid::new_v4());
             let data = TEST_DATA.as_bytes().to_vec();
-            
+
             db.put(key, data).unwrap();
-            
+
             // Cleanup
             let _ = std::fs::remove_dir_all(test_dir);
         });
@@ -25,13 +25,13 @@ fn bench_basic_operations(c: &mut Criterion) {
         b.iter(|| {
             let test_dir = format!("bench_get_{}", uuid::Uuid::new_v4());
             let mut db = FireLocal::new(&test_dir).unwrap();
-            
+
             let key = format!("users/user_{}", uuid::Uuid::new_v4());
             let data = TEST_DATA.as_bytes().to_vec();
             db.put(key.clone(), data).unwrap();
-            
+
             black_box(db.get(&key).unwrap());
-            
+
             // Cleanup
             let _ = std::fs::remove_dir_all(test_dir);
         });
@@ -41,13 +41,13 @@ fn bench_basic_operations(c: &mut Criterion) {
         b.iter(|| {
             let test_dir = format!("bench_delete_{}", uuid::Uuid::new_v4());
             let mut db = FireLocal::new(&test_dir).unwrap();
-            
+
             let key = format!("users/user_{}", uuid::Uuid::new_v4());
             let data = TEST_DATA.as_bytes().to_vec();
             db.put(key.clone(), data).unwrap();
-            
+
             db.delete(key).unwrap();
-            
+
             // Cleanup
             let _ = std::fs::remove_dir_all(test_dir);
         });

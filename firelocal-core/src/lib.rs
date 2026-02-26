@@ -1,7 +1,7 @@
 pub mod api;
 pub mod config;
-#[cfg(not(target_arch = "wasm32"))]
 pub mod error;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod ffi;
 pub mod field_value;
 pub mod health;

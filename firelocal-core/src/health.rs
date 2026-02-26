@@ -1,14 +1,16 @@
 use crate::error::Result;
 use crate::logging::{HealthStatus, PerformanceMetrics};
-use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 /// Health check interface
 pub trait HealthCheck {
     fn name(&self) -> &str;
     fn check(&self) -> Result<HealthCheckResult>;
-    fn is_critical(&self) -> bool { true }
+    fn is_critical(&self) -> bool {
+        true
+    }
 }
 
 /// Result of a health check
@@ -35,7 +37,7 @@ impl HealthCheckResult {
     pub fn unhealthy(name: &str, message: &str, duration: Duration) -> Self {
         let mut status = HealthStatus::healthy();
         status.database_healthy = false;
-        
+
         Self {
             name: name.to_string(),
             status,
@@ -68,13 +70,13 @@ impl HealthCheck for DatabaseHealthCheck {
 
     fn check(&self) -> Result<HealthCheckResult> {
         let start = Instant::now();
-        
+
         // Check if we can perform basic operations
         // This is a simplified check - in a real implementation,
         // you'd check actual database connectivity
-        
+
         let duration = start.elapsed();
-        
+
         if duration < Duration::from_secs(5) {
             Ok(HealthCheckResult::healthy(
                 "database",
@@ -101,12 +103,12 @@ impl HealthCheck for StorageHealthCheck {
 
     fn check(&self) -> Result<HealthCheckResult> {
         let start = Instant::now();
-        
+
         // Check storage availability
         // In a real implementation, you'd check disk space, permissions, etc.
-        
+
         let duration = start.elapsed();
-        
+
         Ok(HealthCheckResult::healthy(
             "storage",
             "Storage is available",
@@ -133,11 +135,11 @@ impl HealthCheck for MemoryHealthCheck {
 
     fn check(&self) -> Result<HealthCheckResult> {
         let start = Instant::now();
-        
+
         // Simple memory check (in a real implementation, you'd use system APIs)
         // For now, just assume we're healthy
         let duration = start.elapsed();
-        
+
         Ok(HealthCheckResult::healthy(
             "memory",
             &format!("Memory usage is below {}MB threshold", self.threshold_mb),
@@ -188,11 +190,8 @@ impl HealthMonitor {
                 }
                 Err(e) => {
                     log::error!("Health check '{}' failed: {}", check.name(), e);
-                    let result = HealthCheckResult::unhealthy(
-                        check.name(),
-                        &e.to_string(),
-                        start.elapsed(),
-                    );
+                    let result =
+                        HealthCheckResult::unhealthy(check.name(), &e.to_string(), start.elapsed());
                     results.push(result.clone());
                     results_map.insert(check.name().to_string(), result);
                 }
@@ -204,7 +203,7 @@ impl HealthMonitor {
             let mut stored_results = self.results.lock().unwrap();
             *stored_results = results_map;
         }
-        
+
         {
             let mut last_check = self.last_check.lock().unwrap();
             *last_check = Instant::now();
@@ -220,7 +219,7 @@ impl HealthMonitor {
 
     pub fn is_healthy(&self) -> bool {
         let results = self.get_last_results();
-        
+
         if results.is_empty() {
             return false;
         }
@@ -246,9 +245,15 @@ impl HealthMonitor {
         let total_checks = results.len();
         let healthy_checks = results.iter().filter(|r| r.status.is_healthy()).count();
         let critical_checks = self.checks.iter().filter(|c| c.is_critical()).count();
-        let healthy_critical = results.iter()
-            .filter(|r| r.status.is_healthy() && 
-                     self.checks.iter().any(|c| c.name() == r.name && c.is_critical()))
+        let healthy_critical = results
+            .iter()
+            .filter(|r| {
+                r.status.is_healthy()
+                    && self
+                        .checks
+                        .iter()
+                        .any(|c| c.name() == r.name && c.is_critical())
+            })
             .count();
 
         HealthSummary {
@@ -328,7 +333,7 @@ mod tests {
         let check = DatabaseHealthCheck::new();
         assert_eq!(check.name(), "database");
         assert!(check.is_critical());
-        
+
         let result = check.check().unwrap();
         assert!(result.status.is_healthy());
     }
@@ -344,15 +349,15 @@ mod tests {
         // Run checks synchronously for test
         let rt = tokio::runtime::Runtime::new().unwrap();
         let results = rt.block_on(monitor.run_checks()).unwrap();
-        
+
         assert_eq!(results.len(), 3);
         assert!(monitor.is_healthy());
-        
+
         let summary = monitor.get_health_summary();
         assert_eq!(summary.total_checks, 3);
         assert_eq!(summary.healthy_checks, 3);
         assert!(summary.overall_healthy);
-        
+
         let json = summary.to_json();
         assert!(json.contains("overall_healthy"));
         assert!(json.contains("total_checks"));

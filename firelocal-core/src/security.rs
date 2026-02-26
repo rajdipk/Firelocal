@@ -1,8 +1,8 @@
 use crate::error::{FireLocalError, Result};
 use crate::logging::log_security_event;
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 /// Security configuration
 #[derive(Debug, Clone)]
@@ -111,19 +111,23 @@ impl SecurityRateLimiter {
     pub fn check_rate_limit(&self, client_id: &str) -> Result<()> {
         let mut requests = self.requests.lock().unwrap();
         let now = Instant::now();
-        
+
         let client_requests = requests.entry(client_id.to_string()).or_default();
-        
+
         // Remove old requests outside the window
         client_requests.retain(|&time| now.duration_since(time) < self.window);
-        
+
         if client_requests.len() >= self.max_requests as usize {
-            log_security_event("RATE_LIMIT_EXCEEDED", &format!("Client {} exceeded rate limit", client_id));
-            return Err(FireLocalError::RateLimitExceeded(
-                format!("Rate limit exceeded: {} requests per {:?}", self.max_requests, self.window)
-            ));
+            log_security_event(
+                "RATE_LIMIT_EXCEEDED",
+                &format!("Client {} exceeded rate limit", client_id),
+            );
+            return Err(FireLocalError::RateLimitExceeded(format!(
+                "Rate limit exceeded: {} requests per {:?}",
+                self.max_requests, self.window
+            )));
         }
-        
+
         client_requests.push(now);
         Ok(())
     }
@@ -136,7 +140,9 @@ impl InputSanitizer {
     /// Sanitize document path
     pub fn sanitize_path(path: &str, max_depth: usize) -> Result<String> {
         if path.is_empty() {
-            return Err(FireLocalError::Validation("Path cannot be empty".to_string()));
+            return Err(FireLocalError::Validation(
+                "Path cannot be empty".to_string(),
+            ));
         }
 
         if path.len() > 4096 {
@@ -145,25 +151,30 @@ impl InputSanitizer {
 
         // Remove leading/trailing slashes and whitespace
         let path = path.trim().trim_matches('/');
-        
+
         // Check for path traversal attempts
         if path.contains("..") || path.contains("\\") {
             log_security_event("PATH_TRAVERSAL_ATTEMPT", &format!("Path: {}", path));
-            return Err(FireLocalError::Security("Path traversal detected".to_string()));
+            return Err(FireLocalError::Security(
+                "Path traversal detected".to_string(),
+            ));
         }
 
         // Check for null bytes
         if path.contains('\0') {
             log_security_event("NULL_BYTE_INJECTION", &format!("Path: {}", path));
-            return Err(FireLocalError::Security("Null byte detected in path".to_string()));
+            return Err(FireLocalError::Security(
+                "Null byte detected in path".to_string(),
+            ));
         }
 
         // Check depth
         let depth = path.split('/').count();
         if depth > max_depth {
-            return Err(FireLocalError::Validation(
-                format!("Path depth {} exceeds maximum {}", depth, max_depth)
-            ));
+            return Err(FireLocalError::Validation(format!(
+                "Path depth {} exceeds maximum {}",
+                depth, max_depth
+            )));
         }
 
         // Validate characters
@@ -171,12 +182,13 @@ impl InputSanitizer {
             if segment.is_empty() {
                 return Err(FireLocalError::Validation("Empty path segment".to_string()));
             }
-            
+
             for c in segment.chars() {
                 if !c.is_alphanumeric() && !"-_.".contains(c) {
-                    return Err(FireLocalError::Validation(
-                        format!("Invalid character '{}' in path", c)
-                    ));
+                    return Err(FireLocalError::Validation(format!(
+                        "Invalid character '{}' in path",
+                        c
+                    )));
                 }
             }
         }
@@ -187,25 +199,33 @@ impl InputSanitizer {
     /// Sanitize document data
     pub fn sanitize_document(data: &[u8], max_size: usize) -> Result<Vec<u8>> {
         if data.is_empty() {
-            return Err(FireLocalError::Validation("Document cannot be empty".to_string()));
+            return Err(FireLocalError::Validation(
+                "Document cannot be empty".to_string(),
+            ));
         }
 
         if data.len() > max_size {
-            return Err(FireLocalError::Validation(
-                format!("Document size {} exceeds maximum {}", data.len(), max_size)
-            ));
+            return Err(FireLocalError::Validation(format!(
+                "Document size {} exceeds maximum {}",
+                data.len(),
+                max_size
+            )));
         }
 
         // Check for null bytes
         if data.contains(&0) {
             log_security_event("NULL_BYTE_IN_DOCUMENT", "Document contains null bytes");
-            return Err(FireLocalError::Security("Null byte detected in document".to_string()));
+            return Err(FireLocalError::Security(
+                "Null byte detected in document".to_string(),
+            ));
         }
 
         // Validate UTF-8
         match std::str::from_utf8(data) {
             Ok(_) => Ok(data.to_vec()),
-            Err(_) => Err(FireLocalError::Validation("Document must be valid UTF-8".to_string())),
+            Err(_) => Err(FireLocalError::Validation(
+                "Document must be valid UTF-8".to_string(),
+            )),
         }
     }
 
@@ -216,8 +236,13 @@ impl InputSanitizer {
 
         // Check for potentially dangerous JSON patterns
         if json_str.contains("__proto__") || json_str.contains("constructor") {
-            log_security_event("PROTOTYPE_POLLUTION", "JSON contains prototype pollution patterns");
-            return Err(FireLocalError::Security("Prototype pollution detected".to_string()));
+            log_security_event(
+                "PROTOTYPE_POLLUTION",
+                "JSON contains prototype pollution patterns",
+            );
+            return Err(FireLocalError::Security(
+                "Prototype pollution detected".to_string(),
+            ));
         }
 
         // Try to parse as JSON
@@ -253,30 +278,46 @@ impl SecurityAuditor {
         // Check IP blocking
         if let Some(ip) = &context.client_ip {
             if self.config.blocked_ips.contains(ip) {
-                log_security_event("BLOCKED_IP_ACCESS", &format!("IP: {}, Operation: {}", ip, operation));
-                return Err(FireLocalError::PermissionDenied("IP address is blocked".to_string()));
+                log_security_event(
+                    "BLOCKED_IP_ACCESS",
+                    &format!("IP: {}, Operation: {}", ip, operation),
+                );
+                return Err(FireLocalError::PermissionDenied(
+                    "IP address is blocked".to_string(),
+                ));
             }
         }
 
         // Check rate limiting
         if self.config.rate_limit_enabled {
-            let client_id = context.client_ip.clone()
+            let client_id = context
+                .client_ip
+                .clone()
                 .unwrap_or_else(|| "anonymous".to_string());
-            
+
             self.rate_limiter.check_rate_limit(&client_id)?;
         }
 
         // Check authentication
-        if self.config.authentication_enabled && !context.is_authenticated()
-            && !self.config.anonymous_operations.contains(&operation.to_string()) {
-            log_security_event("UNAUTHORIZED_ACCESS_ATTEMPT", 
-                &format!("Operation: {}, Path: {}", operation, path));
-            return Err(FireLocalError::PermissionDenied("Authentication required".to_string()));
+        if self.config.authentication_enabled
+            && !context.is_authenticated()
+            && !self
+                .config
+                .anonymous_operations
+                .contains(&operation.to_string())
+        {
+            log_security_event(
+                "UNAUTHORIZED_ACCESS_ATTEMPT",
+                &format!("Operation: {}, Path: {}", operation, path),
+            );
+            return Err(FireLocalError::PermissionDenied(
+                "Authentication required".to_string(),
+            ));
         }
 
         // Validate and sanitize inputs
         let sanitized_path = InputSanitizer::sanitize_path(path, self.config.max_path_depth)?;
-        
+
         if let Some(data) = data {
             InputSanitizer::sanitize_document(data, self.config.max_document_size)?;
             InputSanitizer::validate_json(data)?;
@@ -291,16 +332,30 @@ impl SecurityAuditor {
     }
 
     /// Log security events
-    fn log_operation(&self, context: &SecurityContext, operation: &str, path: &str, has_data: bool) {
-        let user_info = context.user_id.clone()
+    fn log_operation(
+        &self,
+        context: &SecurityContext,
+        operation: &str,
+        path: &str,
+        has_data: bool,
+    ) {
+        let user_info = context
+            .user_id
+            .clone()
             .unwrap_or_else(|| "anonymous".to_string());
-        
-        let ip_info = context.client_ip.clone()
+
+        let ip_info = context
+            .client_ip
+            .clone()
             .unwrap_or_else(|| "unknown".to_string());
 
-        log_security_event("OPERATION", 
-            &format!("User: {}, IP: {}, Operation: {}, Path: {}, HasData: {}", 
-                     user_info, ip_info, operation, path, has_data));
+        log_security_event(
+            "OPERATION",
+            &format!(
+                "User: {}, IP: {}, Operation: {}, Path: {}, HasData: {}",
+                user_info, ip_info, operation, path, has_data
+            ),
+        );
     }
 
     /// Check if user has permission for operation
@@ -334,14 +389,20 @@ impl SecurityAuditor {
             _ => {}
         }
 
-        log_security_event("PERMISSION_DENIED", 
-            &format!("User: {}, Operation: {}, Resource: {}", 
-                     context.user_id.as_ref().unwrap_or(&"anonymous".to_string()), 
-                     operation, resource));
+        log_security_event(
+            "PERMISSION_DENIED",
+            &format!(
+                "User: {}, Operation: {}, Resource: {}",
+                context.user_id.as_ref().unwrap_or(&"anonymous".to_string()),
+                operation,
+                resource
+            ),
+        );
 
-        Err(FireLocalError::PermissionDenied(
-            format!("Insufficient permissions for operation '{}' on resource '{}'", operation, resource)
-        ))
+        Err(FireLocalError::PermissionDenied(format!(
+            "Insufficient permissions for operation '{}' on resource '{}'",
+            operation, resource
+        )))
     }
 }
 
@@ -358,14 +419,14 @@ mod tests {
     fn test_input_sanitizer_path() {
         // Valid path
         assert!(InputSanitizer::sanitize_path("users/alice", 32).is_ok());
-        
+
         // Path traversal
         assert!(InputSanitizer::sanitize_path("../../../etc/passwd", 32).is_err());
-        
+
         // Too deep
         let deep_path = "a/".repeat(40);
         assert!(InputSanitizer::sanitize_path(&deep_path, 32).is_err());
-        
+
         // Invalid characters
         assert!(InputSanitizer::sanitize_path("users/alice@domain", 32).is_err());
     }
@@ -375,11 +436,11 @@ mod tests {
         // Valid document
         let valid_doc = br#"{"name": "Alice", "age": 30}"#;
         assert!(InputSanitizer::sanitize_document(valid_doc, 1024).is_ok());
-        
+
         // Too large
         let large_doc = vec![b'x'; 1024 * 1024 + 1];
         assert!(InputSanitizer::sanitize_document(&large_doc, 1024 * 1024).is_err());
-        
+
         // Null bytes
         let null_doc = b"test\x00data";
         assert!(InputSanitizer::sanitize_document(null_doc, 1024).is_err());
@@ -389,7 +450,7 @@ mod tests {
     fn test_security_context() {
         let anonymous = SecurityContext::anonymous();
         assert!(!anonymous.is_authenticated());
-        
+
         let authenticated = SecurityContext::authenticated("user123", vec!["reader".to_string()]);
         assert!(authenticated.is_authenticated());
         assert!(authenticated.has_role("reader"));
@@ -399,7 +460,7 @@ mod tests {
     #[test]
     fn test_rate_limiter() {
         let limiter = SecurityRateLimiter::new(2, 1); // 2 requests per minute
-        
+
         assert!(limiter.check_rate_limit("client1").is_ok());
         assert!(limiter.check_rate_limit("client1").is_ok());
         assert!(limiter.check_rate_limit("client1").is_err());
@@ -409,23 +470,31 @@ mod tests {
     fn test_security_auditor() {
         let auditor = create_default_security_auditor();
         let context = SecurityContext::anonymous();
-        
+
         // Should succeed for anonymous read (in default config)
-        assert!(auditor.pre_operation_check(&context, "read", "users/alice", None).is_ok());
-        
+        assert!(auditor
+            .pre_operation_check(&context, "read", "users/alice", None)
+            .is_ok());
+
         // Should also succeed for anonymous write (authentication disabled by default)
-        assert!(auditor.pre_operation_check(&context, "write", "users/alice", None).is_ok());
-        
+        assert!(auditor
+            .pre_operation_check(&context, "write", "users/alice", None)
+            .is_ok());
+
         // Test with authentication enabled
         let auth_auditor = SecurityAuditor::new(SecurityConfig {
             authentication_enabled: true,
             ..Default::default()
         });
-        
+
         // Should succeed for read
-        assert!(auth_auditor.pre_operation_check(&context, "read", "users/alice", None).is_ok());
-        
+        assert!(auth_auditor
+            .pre_operation_check(&context, "read", "users/alice", None)
+            .is_ok());
+
         // Should fail for write when authentication is enabled
-        assert!(auth_auditor.pre_operation_check(&context, "write", "users/alice", None).is_err());
+        assert!(auth_auditor
+            .pre_operation_check(&context, "write", "users/alice", None)
+            .is_err());
     }
 }

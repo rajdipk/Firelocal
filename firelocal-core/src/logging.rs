@@ -27,18 +27,18 @@ impl PerformanceMetrics {
     pub fn record_operation(&mut self, duration: Duration, success: bool) {
         self.operation_count += 1;
         self.total_duration += duration;
-        
+
         if duration < self.min_duration {
             self.min_duration = duration;
         }
         if duration > self.max_duration {
             self.max_duration = duration;
         }
-        
+
         if !success {
             self.errors += 1;
         }
-        
+
         if self.operation_count > 0 {
             self.avg_duration = self.total_duration / self.operation_count as u32;
         }
@@ -66,7 +66,7 @@ macro_rules! timed_operation {
         let start = std::time::Instant::now();
         let result = $block;
         let duration = start.elapsed();
-        
+
         match &result {
             Ok(_) => {
                 info!("{} completed in {:?}", $operation_type, duration);
@@ -74,10 +74,13 @@ macro_rules! timed_operation {
             }
             Err(e) => {
                 error!("{} failed in {:?}: {}", $operation_type, duration, e);
-                warn!("{} error - duration: {:?}, error: {}", $operation_type, duration, e);
+                warn!(
+                    "{} error - duration: {:?}, error: {}",
+                    $operation_type, duration, e
+                );
             }
         }
-        
+
         (result, duration)
     }};
 }
@@ -135,7 +138,7 @@ impl Default for LoggingConfig {
 /// Initialize logging with the given configuration
 pub fn init_logging(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Error>> {
     use std::fs::OpenOptions;
-    
+
     let level = match config.level.to_lowercase().as_str() {
         "error" => log::LevelFilter::Error,
         "warn" => log::LevelFilter::Warn,
@@ -151,7 +154,7 @@ pub fn init_logging(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Er
             .create(true)
             .append(true)
             .open(file_path)?;
-            
+
         // In a real implementation, you'd use a proper logging crate like fern or env_logger
         println!("Logging to file: {} at level: {:?}", file_path, level);
     } else {
@@ -167,7 +170,10 @@ pub fn init_logging(config: &LoggingConfig) -> Result<(), Box<dyn std::error::Er
 /// Log database operations
 pub fn log_database_operation(operation: &str, path: &str, success: bool, duration: Duration) {
     if success {
-        info!("DB OP: {} on {} succeeded in {:?}", operation, path, duration);
+        info!(
+            "DB OP: {} on {} succeeded in {:?}",
+            operation, path, duration
+        );
     } else {
         error!("DB OP: {} on {} failed in {:?}", operation, path, duration);
     }
@@ -198,11 +204,11 @@ mod tests {
     #[test]
     fn test_performance_metrics() {
         let mut metrics = PerformanceMetrics::new();
-        
+
         metrics.record_operation(Duration::from_millis(100), true);
         metrics.record_operation(Duration::from_millis(200), true);
         metrics.record_operation(Duration::from_millis(50), false);
-        
+
         assert_eq!(metrics.operation_count, 3);
         assert_eq!(metrics.errors, 1);
         assert!(metrics.success_rate() > 0.5);
@@ -213,7 +219,7 @@ mod tests {
     fn test_health_status() {
         let mut status = HealthStatus::healthy();
         assert!(status.is_healthy());
-        
+
         status.database_healthy = false;
         assert!(!status.is_healthy());
     }

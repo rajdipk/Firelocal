@@ -5,12 +5,12 @@ use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
 /// # Safety
-/// 
+///
 /// All FFI functions in this module are unsafe because they:
 /// - Dereference raw pointers passed from C code
 /// - Assume valid UTF-8 strings for C string parameters
 /// - Return raw pointers that must be properly freed by the caller
-/// 
+///
 /// Callers must ensure:
 /// - All pointer arguments are non-null (unless explicitly allowed)
 /// - All string pointers point to valid, null-terminated UTF-8 strings
@@ -132,7 +132,9 @@ pub unsafe extern "C" fn firelocal_delete(db: *mut FireLocal, key: *const c_char
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn firelocal_batch_new(db: *mut FireLocal) -> *mut crate::transaction::WriteBatch {
+pub unsafe extern "C" fn firelocal_batch_new(
+    db: *mut FireLocal,
+) -> *mut crate::transaction::WriteBatch {
     let db = unsafe {
         if db.is_null() {
             return std::ptr::null_mut();
@@ -252,21 +254,21 @@ pub unsafe extern "C" fn firelocal_compact(db: *mut FireLocal) -> *mut c_char {
     };
 
     if let Ok(stats) = db.compact() {
-            // Return JSON string with stats
-            let json = format!(
-                r#"{{"files_before":{},"files_after":{},"entries_before":{},"entries_after":{},"tombstones_removed":{},"size_before":{},"size_after":{}}}"#,
-                stats.files_before,
-                stats.files_after,
-                stats.entries_before,
-                stats.entries_after,
-                stats.tombstones_removed,
-                stats.size_before,
-                stats.size_after
-            );
-            if let Ok(c_str) = CString::new(json) {
-                return c_str.into_raw();
-            }
+        // Return JSON string with stats
+        let json = format!(
+            r#"{{"files_before":{},"files_after":{},"entries_before":{},"entries_after":{},"tombstones_removed":{},"size_before":{},"size_after":{}}}"#,
+            stats.files_before,
+            stats.files_after,
+            stats.entries_before,
+            stats.entries_after,
+            stats.tombstones_removed,
+            stats.size_before,
+            stats.size_after
+        );
+        if let Ok(c_str) = CString::new(json) {
+            return c_str.into_raw();
         }
+    }
     std::ptr::null_mut()
 }
 
