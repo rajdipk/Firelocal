@@ -1,8 +1,21 @@
 use std::collections::HashMap;
+use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
+
+/// File lock for exclusive access
+pub struct FileLock {
+    _file: File,
+}
+
+impl FileLock {
+    /// Create a new file lock
+    fn new(file: File) -> Self {
+        Self { _file: file }
+    }
+}
 
 /// Trait representing a file handle
 pub trait FileHandle: Read + Write + Seek + Send + Sync {
@@ -21,6 +34,11 @@ pub trait Storage: Send + Sync + 'static {
     fn rename(&self, from: &Path, to: &Path) -> io::Result<()>;
     fn exists(&self, path: &Path) -> bool;
     fn create_dir_all(&self, path: &Path) -> io::Result<()>;
+    
+    /// Acquire an exclusive lock on a file for critical operations
+    fn lock_exclusive(&self, path: &Path) -> io::Result<FileLock>;
+    /// Try to acquire an exclusive lock without blocking
+    fn try_lock_exclusive(&self, path: &Path) -> io::Result<Option<FileLock>>;
 }
 
 // --- Standard Filesystem Implementation (Native) ---
@@ -108,6 +126,102 @@ impl Storage for StdStorage {
 
     fn create_dir_all(&self, path: &Path) -> io::Result<()> {
         std::fs::create_dir_all(path)
+    }
+
+    fn lock_exclusive(&self, path: &Path) -> io::Result<FileLock> {
+        let lock_path = path.with_extension("lock");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&lock_path)?;
+        
+        // Use flock on Unix systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = file.as_raw_fd();
+            let result = unsafe { libc::flock(fd, libc::LOCK_EX) };
+            if result != 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        
+        // For Windows, we'd use LockFileEx
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::LockFileEx;
+            use windows_sys::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
+            
+            let handle = file.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+            let result = unsafe { 
+                LockFileEx(
+                    handle,
+                    LOCKFILE_EXCLUSIVE_LOCK,
+                    0,
+                    0xFFFFFFFF,
+                    0xFFFFFFFF,
+                    std::ptr::null_mut(),
+                )
+            };
+            if result == 0 {
+                return Err(io::Error::last_os_error());
+            }
+        }
+        
+        Ok(FileLock::new(file))
+    }
+
+    fn try_lock_exclusive(&self, path: &Path) -> io::Result<Option<FileLock>> {
+        let lock_path = path.with_extension("lock");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .open(&lock_path)?;
+        
+        // Use non-blocking flock on Unix systems
+        #[cfg(unix)]
+        {
+            use std::os::unix::io::AsRawFd;
+            let fd = file.as_raw_fd();
+            let result = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
+            if result != 0 {
+                let error = io::Error::last_os_error();
+                if error.kind() == io::ErrorKind::WouldBlock {
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+        }
+        
+        // For Windows, we'd use LockFileEx with non-blocking flag
+        #[cfg(windows)]
+        {
+            use std::os::windows::io::AsRawHandle;
+            use windows_sys::Win32::Storage::FileSystem::LockFileEx;
+            use windows_sys::Win32::Storage::FileSystem::LOCKFILE_EXCLUSIVE_LOCK;
+            
+            let handle = file.as_raw_handle() as windows_sys::Win32::Foundation::HANDLE;
+            let result = unsafe { 
+                LockFileEx(
+                    handle,
+                    LOCKFILE_EXCLUSIVE_LOCK,
+                    0,
+                    0xFFFFFFFF,
+                    0xFFFFFFFF,
+                    std::ptr::null_mut(),
+                )
+            };
+            if result == 0 {
+                let error = io::Error::last_os_error();
+                if error.raw_os_error() == Some(33) { // ERROR_LOCK_VIOLATION
+                    return Ok(None);
+                }
+                return Err(error);
+            }
+        }
+        
+        Ok(Some(FileLock::new(file)))
     }
 }
 
@@ -305,5 +419,24 @@ impl Storage for MemoryStorage {
 
     fn create_dir_all(&self, _path: &Path) -> io::Result<()> {
         Ok(()) // "Folders" are implicit in mem fs
+    }
+
+    fn lock_exclusive(&self, path: &Path) -> io::Result<FileLock> {
+        // For memory storage, we can't use real file locks
+        // Create a dummy lock file in memory
+        let lock_path = path.with_extension("lock");
+        let _file = self.create(&lock_path)?;
+        let _file = self.open(&lock_path)?;
+        Ok(FileLock::new(std::fs::File::create("/dev/null").unwrap()))
+    }
+
+    fn try_lock_exclusive(&self, path: &Path) -> io::Result<Option<FileLock>> {
+        // For memory storage, check if lock file exists
+        let lock_path = path.with_extension("lock");
+        if self.exists(&lock_path) {
+            Ok(None)
+        } else {
+            self.lock_exclusive(path).map(Some)
+        }
     }
 }

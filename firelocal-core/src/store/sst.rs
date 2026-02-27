@@ -63,6 +63,96 @@ impl<F: Read + Seek> SstReader<F> {
         })
     }
 
+    /// Validate the integrity of the SST file
+    pub fn validate_integrity(&mut self) -> io::Result<()> {
+        let original_pos = self.file.seek(SeekFrom::Current(0))?;
+        self.file.seek(SeekFrom::Start(0))?;
+
+        let mut flag_buf = [0u8; 1];
+        let mut len_buf = [0u8; 4];
+        let mut record_count = 0;
+
+        loop {
+            // Read flag
+            match self.file.read(&mut flag_buf) {
+                Ok(0) => break, // EOF reached normally
+                Ok(_) => {}
+                Err(e) => {
+                    self.file.seek(SeekFrom::Start(original_pos))?;
+                    return Err(e);
+                }
+            }
+
+            let flag = flag_buf[0];
+            if flag != FLAG_PUT && flag != FLAG_DELETE {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Invalid flag byte: {}", flag),
+                ));
+            }
+
+            // Read and validate k_len
+            if let Err(e) = self.file.read_exact(&mut len_buf) {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(e);
+            }
+            let k_len = u32::from_le_bytes(len_buf) as usize;
+            
+            // Validate key length bounds
+            if k_len > 1024 * 1024 { // 1MB max key length
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Key too long: {} bytes", k_len),
+                ));
+            }
+
+            // Skip key
+            if let Err(e) = self.file.seek(SeekFrom::Current(k_len as i64)) {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(e);
+            }
+
+            // Read and validate v_len
+            if let Err(e) = self.file.read_exact(&mut len_buf) {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(e);
+            }
+            let v_len = u32::from_le_bytes(len_buf) as usize;
+            
+            // Validate value length bounds
+            if v_len > 100 * 1024 * 1024 { // 100MB max value length
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Value too long: {} bytes", v_len),
+                ));
+            }
+
+            // Skip value
+            if let Err(e) = self.file.seek(SeekFrom::Current(v_len as i64)) {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(e);
+            }
+
+            record_count += 1;
+            
+            // Prevent infinite loops on corrupted files
+            if record_count > 10_000_000 {
+                self.file.seek(SeekFrom::Start(original_pos))?;
+                return Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    "Too many records, possible corruption",
+                ));
+            }
+        }
+
+        // Restore original position
+        self.file.seek(SeekFrom::Start(original_pos))?;
+        Ok(())
+    }
+
     // Very inefficient linear scan for M1
     pub fn get(&mut self, search_key: &str) -> io::Result<SstSearchResult> {
         self.file.seek(SeekFrom::Start(0))?; // Reset to start

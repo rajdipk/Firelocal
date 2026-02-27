@@ -29,14 +29,39 @@ pub struct SecurityConfig {
 
 impl Default for SecurityConfig {
     fn default() -> Self {
+        let max_requests = std::env::var("FIRELOCAL_MAX_REQUESTS_PER_MINUTE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1000);
+            
+        let max_doc_size = std::env::var("FIRELOCAL_MAX_DOCUMENT_SIZE")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(10 * 1024 * 1024); // 10MB
+            
+        let max_path_depth = std::env::var("FIRELOCAL_MAX_PATH_DEPTH")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(32);
+
+        let auth_enabled = std::env::var("FIRELOCAL_AUTH_ENABLED")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(false);
+            
+        let rate_limit_enabled = std::env::var("FIRELOCAL_RATE_LIMIT_ENABLED")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(true);
+
         Self {
-            authentication_enabled: false,
+            authentication_enabled: auth_enabled,
             authorization_enabled: true,
-            rate_limit_enabled: true,
+            rate_limit_enabled,
             audit_logging_enabled: true,
-            max_requests_per_minute: 1000,
-            max_document_size: 10 * 1024 * 1024, // 10MB
-            max_path_depth: 32,
+            max_requests_per_minute: max_requests,
+            max_document_size: max_doc_size,
+            max_path_depth,
             blocked_ips: Vec::new(),
             anonymous_operations: vec!["read".to_string()],
         }
@@ -97,6 +122,7 @@ pub struct SecurityRateLimiter {
     requests: Arc<Mutex<HashMap<String, Vec<Instant>>>>,
     max_requests: u32,
     window: Duration,
+    last_cleanup: Arc<Mutex<Instant>>,
 }
 
 impl SecurityRateLimiter {
@@ -105,10 +131,43 @@ impl SecurityRateLimiter {
             requests: Arc::new(Mutex::new(HashMap::new())),
             max_requests,
             window: Duration::from_secs(window_minutes * 60),
+            last_cleanup: Arc::new(Mutex::new(Instant::now())),
         }
     }
 
+    /// Clean up old request entries for inactive clients
+    fn cleanup_old_entries(&self) {
+        let mut last_cleanup = self.last_cleanup.lock().unwrap();
+        let now = Instant::now();
+        
+        // Only cleanup every 5 minutes to avoid performance impact
+        if now.duration_since(*last_cleanup) < Duration::from_secs(300) {
+            return;
+        }
+        
+        let mut requests = self.requests.lock().unwrap();
+        let mut to_remove = Vec::new();
+        
+        for (client_id, client_requests) in requests.iter() {
+            // Remove clients that haven't made requests in the last hour
+            if let Some(last_request) = client_requests.last() {
+                if now.duration_since(*last_request) > Duration::from_secs(3600) {
+                    to_remove.push(client_id.clone());
+                }
+            }
+        }
+        
+        for client_id in to_remove {
+            requests.remove(&client_id);
+        }
+        
+        *last_cleanup = now;
+    }
+
     pub fn check_rate_limit(&self, client_id: &str) -> Result<()> {
+        // Periodically cleanup old entries
+        self.cleanup_old_entries();
+        
         let mut requests = self.requests.lock().unwrap();
         let now = Instant::now();
 
@@ -130,6 +189,14 @@ impl SecurityRateLimiter {
 
         client_requests.push(now);
         Ok(())
+    }
+
+    /// Get current statistics for monitoring
+    pub fn get_stats(&self) -> (usize, usize) {
+        let requests = self.requests.lock().unwrap();
+        let total_clients = requests.len();
+        let total_requests: usize = requests.values().map(|v| v.len()).sum();
+        (total_clients, total_requests)
     }
 }
 
@@ -464,6 +531,11 @@ mod tests {
         assert!(limiter.check_rate_limit("client1").is_ok());
         assert!(limiter.check_rate_limit("client1").is_ok());
         assert!(limiter.check_rate_limit("client1").is_err());
+        
+        // Test stats
+        let (clients, requests) = limiter.get_stats();
+        assert_eq!(clients, 1);
+        assert_eq!(requests, 2);
     }
 
     #[test]

@@ -30,14 +30,14 @@ fn test_rules_parser_and_enforcement() {
         .is_ok());
 
     // 4. Test Allowed Read
-    assert!(db.get("users/alice").is_some());
+    assert!(db.get("users/alice").unwrap().is_some());
 
     // 5. Test Denied Write (path not matching)
     // "posts/123" not in users
     assert!(db.put("posts/123".to_string(), b"data".to_vec()).is_err());
 
     // 6. Test Denied Read
-    assert!(db.get("posts/123").is_none()); // get returns None on error/missing
+    assert!(db.get("posts/123").unwrap().is_none()); // get returns None on error/missing
 
     let _ = fs::remove_dir_all(path);
 }

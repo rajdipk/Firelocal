@@ -83,7 +83,7 @@ fn test_permission_denied_on_read() {
 
     // Try to read - should return None (permission denied)
     let result = db.get("users/alice");
-    assert!(result.is_none(), "Read should be denied by rules");
+    assert!(result.unwrap().is_none(), "Read should be denied by rules");
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -116,7 +116,7 @@ fn test_get_nonexistent_document() {
 
     // Get nonexistent document
     let result = db.get("nonexistent/path");
-    assert!(result.is_none(), "Nonexistent document should return None");
+    assert!(result.unwrap().is_none(), "Nonexistent document should return None");
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);
@@ -234,7 +234,7 @@ fn test_concurrent_operations_same_document() {
     // Verify final value
     let final_doc = db.get("counter").expect("Failed to get document");
     assert!(
-        !final_doc.is_empty(),
+        !final_doc.unwrap().is_empty(),
         "Document should exist after concurrent operations"
     );
 

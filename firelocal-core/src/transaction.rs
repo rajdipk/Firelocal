@@ -77,6 +77,7 @@ pub struct Transaction {
     reads: HashMap<String, Option<(Vec<u8>, u64)>>, // path -> (data, version)
     writes: Vec<BatchOperation>,
     transaction_id: String,
+    write_conflicts: HashMap<String, Vec<u8>>, // Track write conflicts
 }
 
 impl Transaction {
@@ -86,6 +87,7 @@ impl Transaction {
             reads: HashMap::new(),
             writes: Vec::new(),
             transaction_id: Uuid::new_v4().to_string(),
+            write_conflicts: HashMap::new(),
         }
     }
 
@@ -119,6 +121,11 @@ impl Transaction {
         self.writes.push(BatchOperation::Delete { path });
     }
 
+    /// Record a write conflict for a document
+    pub fn record_write_conflict(&mut self, path: String, conflicting_data: Vec<u8>) {
+        self.write_conflicts.insert(path, conflicting_data);
+    }
+
     /// Get the transaction ID
     pub fn transaction_id(&self) -> &str {
         &self.transaction_id
@@ -129,23 +136,65 @@ impl Transaction {
         &self.writes
     }
 
-    /// Validate that read versions haven't changed (optimistic concurrency check)
-    pub fn validate<F>(&self, get_current_version: F) -> Result<()>
+    /// Get write conflicts
+    pub fn write_conflicts(&self) -> &HashMap<String, Vec<u8>> {
+        &self.write_conflicts
+    }
+
+    /// Validate that read versions haven't changed and check for write conflicts
+    pub fn validate<F1, F2>(&self, get_current_version: F1, _get_current_data: F2) -> Result<()>
     where
-        F: Fn(&str) -> Option<u64>,
+        F1: Fn(&str) -> Option<u64>,
+        F2: Fn(&str) -> Option<u64>,
     {
+        // Check read conflicts (original validation)
         for (path, read_data) in &self.reads {
             let read_version = read_data.as_ref().map(|(_, v)| *v);
             let current_version = get_current_version(path);
 
             if read_version != current_version {
                 return Err(io::Error::other(format!(
-                    "Transaction conflict: document {} was modified",
-                    path
+                    "Transaction conflict: document {} was modified (read version: {:?}, current version: {:?})",
+                    path, read_version, current_version
                 ))
                 .into());
             }
         }
+
+        // Check write conflicts
+        for (path, _) in &self.write_conflicts {
+            // If any write conflicts exist, the transaction should fail
+            return Err(io::Error::other(format!(
+                "Transaction conflict: document {} was modified by another transaction",
+                path
+            ))
+            .into());
+        }
+
+        // Check for write-write conflicts (multiple transactions writing same document)
+        for write_op in &self.writes {
+            let path = match write_op {
+                BatchOperation::Set { path, .. } => path,
+                BatchOperation::Update { path, .. } => path,
+                BatchOperation::Delete { path } => path,
+            };
+
+            // Check if this document was written by another transaction
+            // In a real implementation, this would involve checking a global transaction log
+            // For now, we'll just check if the current version changed since we started
+            if let Some(current_version) = get_current_version(path) {
+                if let Some(Some((_, read_version))) = self.reads.get(path) {
+                    if current_version != *read_version {
+                        return Err(io::Error::other(format!(
+                            "Write-write conflict: document {} version changed during transaction",
+                            path
+                        ))
+                        .into());
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 }
@@ -221,11 +270,25 @@ mod tests {
         txn.get("users/alice", Some(b"data".to_vec()), 1);
 
         // Validation should pass if version is still 1
-        let result = txn.validate(|path| if path == "users/alice" { Some(1) } else { None });
+        let result = txn.validate(
+            |path| if path == "users/alice" { Some(1) } else { None },
+            |_| None,
+        );
         assert!(result.is_ok());
 
         // Validation should fail if version changed to 2
-        let result = txn.validate(|path| if path == "users/alice" { Some(2) } else { None });
+        let result = txn.validate(
+            |path| if path == "users/alice" { Some(2) } else { None },
+            |_| None,
+        );
         assert!(result.is_err());
+
+        // Test write conflict detection
+        let mut txn2 = Transaction::new();
+        txn2.record_write_conflict("users/bob".to_string(), b"conflicting_data".to_vec());
+        
+        let result = txn2.validate(|_| None, |_| None);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("write conflict"));
     }
 }

@@ -93,7 +93,7 @@ pub unsafe extern "C" fn firelocal_get_resource(
 
     let key_str = unsafe { CStr::from_ptr(key) }.to_string_lossy();
 
-    if let Some(val) = db.get(&key_str) {
+    if let Ok(Some(val)) = db.get(&key_str) {
         if let Ok(s) = std::str::from_utf8(&val) {
             if let Ok(c_str) = CString::new(s) {
                 return c_str.into_raw();

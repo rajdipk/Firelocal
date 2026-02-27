@@ -69,9 +69,17 @@ impl DocumentReference {
                 poisoned.into_inner()
             }
         };
-        if let Some(bytes) = db.get(&self.path) {
-            if let Ok(s) = std::str::from_utf8(&bytes) {
-                return Document::from_json(s).ok();
+        match db.get(&self.path) {
+            Ok(Some(bytes)) => {
+                if let Ok(s) = std::str::from_utf8(&bytes) {
+                    return Document::from_json(s).ok();
+                }
+            }
+            Ok(None) => {
+                // Document not found
+            }
+            Err(e) => {
+                eprintln!("Error getting document '{}': {}", self.path, e);
             }
         }
         None

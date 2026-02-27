@@ -50,8 +50,6 @@ pub struct FireLocal<S: Storage = StdStorage> {
     #[cfg(feature = "sync")]
     sync: SyncManager,
     config: Option<FireLocalConfig>,
-    #[allow(dead_code)]
-    document_versions: HashMap<String, u64>,
 }
 
 impl FireLocal<StdStorage> {
@@ -78,13 +76,15 @@ impl<S: Storage> FireLocal<S> {
         storage.create_dir_all(&path)?;
 
         let wal_path = path.join("wal.log");
-        let wal = WriteAheadLog::open(storage.clone(), wal_path)?;
+        let wal = WriteAheadLog::open(storage.clone(), &wal_path)?;
 
         let index = Arc::new(BasicIndexProvider::new());
 
         let mut memtable = Memtable::new();
 
-        // Replay WAL
+        // Replay WAL with file locking to prevent race conditions
+        let _wal_lock = storage.lock_exclusive(&wal_path)?;
+        
         if let Ok(iter) = wal.iter() {
             for entry in iter.flatten() {
                 if entry.is_empty() {
@@ -95,7 +95,15 @@ impl<S: Storage> FireLocal<S> {
                     continue;
                 }
                 let k_len = match entry[1..5].try_into() {
-                    Ok(bytes) => u32::from_le_bytes(bytes) as usize,
+                    Ok(bytes) => {
+                        let len = u32::from_le_bytes(bytes) as usize;
+                        // Add bounds checking to prevent memory exhaustion
+                        if len > 1024 * 1024 { // 1MB max key length
+                            eprintln!("WAL entry key too long: {} bytes", len);
+                            continue;
+                        }
+                        len
+                    },
                     Err(_) => {
                         eprintln!("Invalid WAL entry format: key length bytes");
                         continue;
@@ -113,7 +121,15 @@ impl<S: Storage> FireLocal<S> {
                     }
                     let v_len_offset = 5 + k_len;
                     let v_len = match entry[v_len_offset..v_len_offset + 4].try_into() {
-                        Ok(bytes) => u32::from_le_bytes(bytes) as usize,
+                        Ok(bytes) => {
+                            let len = u32::from_le_bytes(bytes) as usize;
+                            // Add bounds checking for value length
+                            if len > 100 * 1024 * 1024 { // 100MB max value length
+                                eprintln!("WAL entry value too long: {} bytes", len);
+                                continue;
+                            }
+                            len
+                        },
                         Err(_) => {
                             eprintln!("Invalid WAL entry format: value length bytes");
                             continue;
@@ -140,6 +156,8 @@ impl<S: Storage> FireLocal<S> {
                 }
             }
         }
+        
+        // Lock is automatically released when wal_lock goes out of scope
 
         // Load SSTs
         let mut ssts = Vec::new();
@@ -174,7 +192,6 @@ impl<S: Storage> FireLocal<S> {
             #[cfg(feature = "sync")]
             sync: SyncManager::new(Box::new(MockRemoteStore)),
             config: None,
-            document_versions: HashMap::new(),
         })
     }
 
@@ -258,11 +275,16 @@ impl<S: Storage> FireLocal<S> {
             }
         }
 
-        let mut entry = Vec::new();
+        // Optimize WAL entry creation with pre-allocated buffer
+        let key_len = key.len();
+        let value_len = value.len();
+        let total_len = 1 + 4 + key_len + 4 + value_len;
+        
+        let mut entry = Vec::with_capacity(total_len);
         entry.push(0u8);
-        entry.extend_from_slice(&(key.len() as u32).to_le_bytes());
+        entry.extend_from_slice(&(key_len as u32).to_le_bytes());
         entry.extend_from_slice(key.as_bytes());
-        entry.extend_from_slice(&(value.len() as u32).to_le_bytes());
+        entry.extend_from_slice(&(value_len as u32).to_le_bytes());
         entry.extend_from_slice(&value);
 
         self.wal.append(&entry)?;
@@ -277,9 +299,13 @@ impl<S: Storage> FireLocal<S> {
         self.check_rules(&key, "write")?;
         let _ = self.index.on_delete(&key);
 
-        let mut entry = Vec::new();
+        // Optimize WAL entry creation for delete
+        let key_len = key.len();
+        let total_len = 1 + 4 + key_len + 4;
+        
+        let mut entry = Vec::with_capacity(total_len);
         entry.push(1u8);
-        entry.extend_from_slice(&(key.len() as u32).to_le_bytes());
+        entry.extend_from_slice(&(key_len as u32).to_le_bytes());
         entry.extend_from_slice(key.as_bytes());
         entry.extend_from_slice(&0u32.to_le_bytes());
 
@@ -289,13 +315,17 @@ impl<S: Storage> FireLocal<S> {
         Ok(())
     }
 
-    pub fn get(&self, key: &str) -> Option<Vec<u8>> {
-        if self.check_rules(key, "read").is_err() {
-            return None;
+    pub fn get(&self, key: &str) -> io::Result<Option<Vec<u8>>> {
+        if let Err(e) = self.check_rules(key, "read") {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                format!("Security rules check failed for read operation on '{}': {}", key, e)
+            ));
         }
+        
         // Memtable check
         if let Some(val) = self.memtable.get(key) {
-            return Some(val.to_vec());
+            return Ok(Some(val.to_vec()));
         }
 
         // SST check (newest first)
@@ -304,17 +334,32 @@ impl<S: Storage> FireLocal<S> {
                 Ok(guard) => guard,
                 Err(poisoned) => {
                     eprintln!("SST mutex poisoned, attempting recovery");
-                    poisoned.into_inner()
+                    let mut guard = poisoned.into_inner();
+                    
+                    // Validate SST data integrity after recovery
+                    if let Err(e) = guard.validate_integrity() {
+                        eprintln!("SST data validation failed after recovery: {}", e);
+                        continue; // Skip corrupted SST
+                    }
+                    
+                    guard
                 }
             };
             match sst.get(key) {
-                Ok(SstSearchResult::Found(val)) => return Some(val),
-                Ok(SstSearchResult::Deleted) => return None,
+                Ok(SstSearchResult::Found(val)) => {
+                    // Validate retrieved data
+                    if val.is_empty() {
+                        eprintln!("SST returned empty data for key: {}", key);
+                        continue;
+                    }
+                    return Ok(Some(val));
+                },
+                Ok(SstSearchResult::Deleted) => return Ok(None),
                 Ok(SstSearchResult::NotFound) | Err(_) => continue,
             }
         }
 
-        None
+        Ok(None)
     }
 
     pub fn query(&self, q: &QueryAst) -> io::Result<Vec<Document>> {
@@ -326,13 +371,22 @@ impl<S: Storage> FireLocal<S> {
 
         let mut docs = Vec::new();
         for path in paths {
-            if self.check_rules(&path, "read").is_ok() {
-                if let Some(bytes) = self.get(&path) {
+            match self.get(&path) {
+                Ok(Some(bytes)) => {
                     if let Ok(s) = std::str::from_utf8(&bytes) {
                         if let Ok(doc) = Document::from_json(s) {
                             docs.push(doc);
                         }
                     }
+                }
+                Ok(None) => {
+                    // Document not found or deleted, skip
+                    continue;
+                }
+                Err(e) => {
+                    // Security violation or other error, skip and continue
+                    eprintln!("Error querying document '{}': {}", path, e);
+                    continue;
                 }
             }
         }
@@ -348,8 +402,12 @@ impl<S: Storage> FireLocal<S> {
     }
 
     fn notify_listeners(&self) {
-        for (id, q) in self.listeners.get_listeners() {
-            if let Ok(docs) = self.query(&q) {
+        // Get listener snapshots without holding locks during notification
+        let listener_snapshots = self.listeners.get_listener_snapshots();
+        
+        // Notify each listener independently to prevent deadlocks
+        for (id, query) in listener_snapshots {
+            if let Ok(docs) = self.query(&query) {
                 self.listeners.notify(id, docs);
             }
         }
@@ -358,18 +416,25 @@ impl<S: Storage> FireLocal<S> {
     // Sync Operations
     #[cfg(feature = "sync")]
     pub fn sync_push(&self, key: &str) -> io::Result<()> {
-        if let Some(bytes) = self.get(key) {
-            if let Ok(s) = std::str::from_utf8(&bytes) {
-                if let Ok(doc) = Document::from_json(s) {
-                    self.sync.push(&doc).map_err(io::Error::other)?;
-                    return Ok(());
+        match self.get(key) {
+            Ok(Some(bytes)) => {
+                if let Ok(s) = std::str::from_utf8(&bytes) {
+                    if let Ok(doc) = Document::from_json(s) {
+                        self.sync.push(&doc).map_err(io::Error::other)?;
+                        return Ok(());
+                    }
                 }
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("Document '{}' contains invalid JSON data", key),
+                ))
             }
+            Ok(None) => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("Document '{}' not found", key),
+            )),
+            Err(e) => Err(e), // Propagate security or other errors
         }
-        Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Document '{}' not found or contains invalid JSON data", key),
-        ))
     }
 
     #[cfg(feature = "sync")]
@@ -422,6 +487,38 @@ impl<S: Storage> FireLocal<S> {
 
     /// Commit a write batch atomically
     pub fn commit_batch(&mut self, batch: &WriteBatch) -> Result<()> {
+        // Validate batch size to prevent memory exhaustion
+        const MAX_BATCH_SIZE: usize = 1000; // Maximum operations per batch
+        const MAX_BATCH_DATA_SIZE: usize = 100 * 1024 * 1024; // 100MB total data
+
+        if batch.len() > MAX_BATCH_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Batch size {} exceeds maximum {}", batch.len(), MAX_BATCH_SIZE)
+            ).into());
+        }
+
+        // Calculate total data size
+        let total_data_size: usize = batch.operations()
+            .iter()
+            .map(|op| {
+                match op {
+                    crate::transaction::BatchOperation::Set { data, .. } => data.len(),
+                    crate::transaction::BatchOperation::Update { data, .. } => data.len(),
+                    crate::transaction::BatchOperation::Delete { .. } => 0,
+                }
+            })
+            .sum();
+
+        if total_data_size > MAX_BATCH_DATA_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                format!("Batch data size {}MB exceeds maximum {}MB", 
+                    total_data_size / (1024 * 1024), 
+                    MAX_BATCH_DATA_SIZE / (1024 * 1024))
+            ).into());
+        }
+
         // Validate all operations first
         for op in batch.operations() {
             if let Some(path) = self.get_operation_path(op) {
@@ -474,12 +571,20 @@ impl<S: Storage> FireLocal<S> {
         mut data: serde_json::Map<String, serde_json::Value>,
     ) -> io::Result<()> {
         // Get existing document for FieldValue processing
-        let existing_data = if let Some(bytes) = self.get(&key) {
-            std::str::from_utf8(&bytes).ok().and_then(|s| {
-                serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(s).ok()
-            })
-        } else {
-            None
+        let existing_data = match self.get(&key) {
+            Ok(Some(bytes)) => {
+                std::str::from_utf8(&bytes).ok().and_then(|s| {
+                    serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(s).ok()
+                })
+            }
+            Ok(None) => None,
+            Err(e) => {
+                // If there's a security error getting the document, we can't process field values
+                return Err(io::Error::new(
+                    io::ErrorKind::PermissionDenied,
+                    format!("Cannot access document '{}' for field value processing: {}", key, e)
+                ));
+            }
         };
 
         // Process FieldValue operations

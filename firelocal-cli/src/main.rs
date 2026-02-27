@@ -97,7 +97,7 @@ fn main() -> Result<()> {
             let mut db = FireLocal::new(db_path).context("Failed to open DB")?; // mut required for method signature if internal mutable? No, get is &self usually, but load_rules needs mut.
             db.load_rules("service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }")?;
 
-            if let Some(bytes) = db.get(&key) {
+            if let Ok(Some(bytes)) = db.get(&key) {
                 if let Ok(s) = std::str::from_utf8(&bytes) {
                     println!("{}", s);
                 } else {
@@ -156,7 +156,7 @@ fn main() -> Result<()> {
                                     continue;
                                 }
                                 let key = parts[1];
-                                if let Some(bytes) = db.get(key) {
+                                if let Ok(Some(bytes)) = db.get(key) {
                                     let s = String::from_utf8_lossy(&bytes);
                                     println!("{}", s);
                                 } else {

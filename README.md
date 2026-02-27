@@ -14,40 +14,139 @@
   </p>
 </div>
 
-**FireLocal** is a offline-first database engine that provides Firestore-compatible APIs for local data persistence. Built with Rust for performance and reliability, it's perfect for mobile apps, desktop applications, web applications, and any scenario requiring local-first architecture with zero external dependencies.
+**FireLocal** is a production-ready, offline-first database engine that provides Firestore-compatible APIs for local data persistence. Built with Rust for performance and reliability, it's perfect for mobile apps, desktop applications, web applications, and any scenario requiring local-first architecture with zero external dependencies.
 
-### Why FireLocal?
+### 🚀 Why FireLocal?
 
--  **🚀 Production Ready** - Enterprise-grade security, monitoring, and error handling
--  **🔒 Secure by Default** - Comprehensive security framework with authentication & authorization
--  **📊 Full Observability** - Built-in logging, metrics, and health monitoring
--  **📱 Offline-First** - Works seamlessly without internet connection
--  **⚡ High Performance** - LSM-Tree storage with comprehensive benchmarks
--  **🛡️ Battle-Tested** - Extensive testing suite with 67+ tests passing
--  **🔧 Enterprise Features** - Rate limiting, audit logging, input sanitization
--  **🌐 Multi-Platform** - Rust, JavaScript, Dart, Python, WASM support
--  **🔄 Reliable** - ACID transactions with WAL durability and recovery
--  **📚 Familiar** - Firestore-compatible API for Firebase developers
+- **Production Ready** - Enterprise-grade security, monitoring, and error handling
+- **Secure by Default** - Comprehensive security framework with authentication & authorization
+- **Full Observability** - Built-in logging, metrics, and health monitoring
+- **Offline-First** - Works seamlessly without internet connection
+- **High Performance** - LSM-Tree storage with comprehensive benchmarks (400K+ read ops/sec)
+- **Battle-Tested** - Extensive testing suite with 67+ tests passing
+- **Enterprise Features** - Rate limiting, audit logging, input sanitization
+- **Multi-Platform** - Rust, JavaScript, Dart, Python, WASM support
+- **Reliable** - ACID transactions with WAL durability and recovery
+- **Familiar API** - Firestore-compatible for Firebase developers
 
-## 📖 Documentation & Guides
+## 📖 Documentation
 
-For complete documentation, guides, and API reference, please visit:
+📚 **[Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide for all users and developers
 
-📚 **[FireLocal Complete Documentation](DOCUMENTATION.md)** - Comprehensive guide for all users and developers
+### Quick Start
 
-### Quick Links
-- [Getting Started](DOCUMENTATION.md#getting-started) - Installation and first steps
-- [API Reference](DOCUMENTATION.md#api-reference) - Complete API documentation
-- [Database Structure](DOCUMENTATION.md#database-structure) - How data is organized
-- [Security Rules](DOCUMENTATION.md#security-rules) - Authentication and authorization
-- [Production Deployment](DOCUMENTATION.md#production-deployment) - Enterprise deployment guide
-- [Examples](DOCUMENTATION.md#examples) - Code examples for all languages
-- [Troubleshooting](DOCUMENTATION.md#troubleshooting) - Common issues and solutions
+#### Installation
+```bash
+# Rust
+cargo add firelocal-core
+
+# JavaScript/Node.js
+npm install @firelocal/node
+
+# WebAssembly
+npm install firelocal-wasm
+
+# CLI Tool
+cargo install firelocal-cli
+```
+
+#### Basic Usage
+```rust
+use firelocal_core::FireLocal;
+
+let mut db = FireLocal::new("./my_database")?;
+db.put("users/alice".to_string(), b"{"name":"Alice"}")?;
+let data = db.get("users/alice")?;
+```
+
+## 🌐 Multi-Platform Support
+
+| Platform | Status | Package |
+|----------|--------|----------|
+| **Rust** | ✅ Production Ready | `firelocal-core` |
+| **JavaScript/Node.js** | ✅ Production Ready | `@firelocal/node` |
+| **WebAssembly** | ✅ Production Ready | `firelocal-wasm` |
+| **Python** | 🚧 Framework Ready | `firelocal` |
+| **Dart** | 🚧 Framework Ready | `firelocal` |
+| **C#/.NET** | 🚧 Framework Ready | `FireLocal` |
+| **CLI Tool** | ✅ Production Ready | `firelocal-cli` |
 
 ## ✨ Key Features
 
 - **Firestore-Compatible API** - Familiar API for Firebase developers
 - **Offline-First** - Works without internet connection
+- **ACID Transactions** - Reliable data operations
+- **WAL Durability** - Write-ahead logging for crash recovery
+- **LSM-Tree Storage** - High-performance data organization
+- **Security Rules** - Authentication and authorization framework
+- **Rate Limiting** - Built-in protection against abuse
+- **Audit Logging** - Comprehensive security event tracking
+- **Multi-Language Bindings** - Support for major programming languages
+- **Production Monitoring** - Health checks and performance metrics
+- **Memory Safety** - Rust's guaranteed memory safety
+- **Cross-Platform** - Works on Windows, macOS, Linux
+
+## 🛠️ Development Status
+
+- ✅ **Core Engine** - Production ready with comprehensive testing
+- ✅ **Rust API** - Stable and fully documented
+- ✅ **JavaScript/Node.js** - Production ready with native performance
+- ✅ **WebAssembly** - Browser-compatible and optimized
+- ✅ **CLI Tool** - Full-featured command-line interface
+- 🚧 **Python Bindings** - Framework ready, testing in progress
+- 🚧 **Dart Bindings** - Framework ready, testing in progress
+- 🚧 **C#/.NET** - Framework ready, testing in progress
+
+## 📊 Performance
+
+- **Read Operations**: 411,271 ops/sec
+- **Write Operations**: 31.46 ops/sec
+- **Mixed Workload**: 63.00 ops/sec
+- **Large Documents**: 32.62 ops/sec
+- **Memory Usage**: Efficient for typical workloads
+- **Concurrency**: Thread-safe with proper locking
+
+## 🔒 Security Features
+
+- **Authentication Framework** - User identity management
+- **Authorization Rules** - Firestore-compatible security rules
+- **Input Sanitization** - Protection against injection attacks
+- **Rate Limiting** - Configurable request limits
+- **Audit Logging** - Comprehensive security event tracking
+- **Path Validation** - Prevents directory traversal
+- **Size Limits** - Configurable document size restrictions
+
+## 📋 Requirements
+
+- **Rust**: 1.70+ (for core library)
+- **Node.js**: 18+ (for JavaScript bindings)
+- **Python**: 3.8+ (for Python bindings)
+- **Dart**: 2.17+ (for Dart bindings)
+- **.NET**: 6.0+ (for C# bindings)
+
+## 🤝 Contributing
+
+We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) for details.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🔗 Links
+
+- **Documentation**: [Complete Guide](DOCUMENTATION.md)
+- **API Reference**: [Core API](DOCUMENTATION.md#api-reference)
+- **Examples**: [Code Samples](DOCUMENTATION.md#examples)
+- **Troubleshooting**: [Common Issues](DOCUMENTATION.md#troubleshooting)
+- **GitHub Repository**: [FireLocal](https://github.com/rajdipk/Firelocal)
+- **Issues**: [Bug Reports](https://github.com/rajdipk/Firelocal/issues)
+- **Discussions**: [Community Forum](https://github.com/rajdipk/Firelocal/discussions)
+
+---
+
+<div align="center">
+  <p>Built with ❤️ for the offline-first community</p>
+</div>
 - **Multi-Platform** - Rust, JavaScript, Dart, Python, WASM support
 - **ACID Transactions** - Reliable data operations with OCC
 - **Security Rules** - Firebase-compatible security rules engine

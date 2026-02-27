@@ -69,7 +69,7 @@ impl FireLocal {
     pub fn get(&self, key: String) -> Result<JsValue, JsValue> {
         let db = self.inner.lock().unwrap();
 
-        if let Some(bytes) = db.get(&key) {
+        if let Ok(Some(bytes)) = db.get(&key) {
             let s = std::str::from_utf8(&bytes).map_err(|e| JsValue::from_str(&e.to_string()))?;
             let parsed =
                 js_sys::JSON::parse(s).map_err(|_| JsValue::from_str("Failed to parse JSON"))?;

@@ -47,7 +47,7 @@ impl FireLocal {
             .lock()
             .map_err(|_| Error::new(Status::GenericFailure, "Lock error".to_string()))?;
 
-        if let Some(bytes) = db.get(&key) {
+        if let Ok(Some(bytes)) = db.get(&key) {
             let s = String::from_utf8(bytes)
                 .map_err(|e| Error::new(Status::GenericFailure, e.to_string()))?;
             Ok(Some(s))

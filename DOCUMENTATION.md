@@ -1,7 +1,7 @@
 # FireLocal - Complete User & Developer Guide
 
 **Version:** 1.0.0  
-**Last Updated:** December 8, 2025  
+**Last Updated:** February 2025  
 **Status:** Production Ready
 
 ---
@@ -9,22 +9,16 @@
 ## Table of Contents
 
 1. [Introduction](#introduction)
-2. [What is FireLocal?](#what-is-firelocal)
-3. [Architecture Overview](#architecture-overview)
-4. [Getting Started](#getting-started)
-5. [Windows Desktop Integration](#windows-desktop-integration)
-6. [Web (WASM) Integration](#web-wasm-integration)
-7. [Core Concepts](#core-concepts)
-8. [Installation Guide](#installation-guide)
-9. [Database Structure](#database-structure)
-10. [How It Works](#how-it-works)
-11. [API Reference](#api-reference)
-12. [Security Rules](#security-rules)
-13. [Examples](#examples)
-14. [Advanced Topics](#advanced-topics)
-15. [Performance Tuning](#performance-tuning)
-16. [Troubleshooting](#troubleshooting)
-17. [FAQ](#faq)
+2. [Getting Started](#getting-started)
+3. [Installation Guide](#installation-guide)
+4. [Core Concepts](#core-concepts)
+5. [API Reference](#api-reference)
+6. [Security Rules](#security-rules)
+7. [Examples](#examples)
+8. [Performance Tuning](#performance-tuning)
+9. [Production Deployment](#production-deployment)
+10. [Troubleshooting](#troubleshooting)
+11. [FAQ](#faq)
 
 ---
 
@@ -34,20 +28,640 @@ Welcome to FireLocal! This comprehensive guide will help you understand, install
 
 ### Who Should Read This?
 
-- **Beginners**: Start with [What is FireLocal?](#what-is-firelocal) and [Getting Started](#getting-started)
-- **Windows Desktop Developers**: Jump to [Windows Desktop Integration](#windows-desktop-integration)
-- **Web Developers**: Jump to [Web (WASM) Integration](#web-wasm-integration)
+- **Beginners**: Start with [Getting Started](#getting-started) and [Installation Guide](#installation-guide)
+- **Web Developers**: Jump to [Web (WASM) Integration](#installation-guide#webassembly-wasm-integration)
 - **Mobile Developers**: Jump to [Installation Guide](#installation-guide) for Android/iOS
-- **System Architects**: Review [Architecture Overview](#architecture-overview) and [Performance](#performance-tuning)
-- **DevOps Engineers**: See [Database Structure](#database-structure) and [Troubleshooting](#troubleshooting)
+- **System Architects**: Review [Core Concepts](#core-concepts) and [Performance](#performance-tuning)
+- **DevOps Engineers**: See [Production Deployment](#production-deployment) and [Troubleshooting](#troubleshooting)
 
 ---
 
-## What is FireLocal?
+## Getting Started
 
 FireLocal is an **offline-first database** that provides a Firestore-compatible API for local data persistence. It's designed for applications that need to work offline, sync data when online, and provide a seamless user experience regardless of network conditions.
 
-### Key Features
+### Quick Start Example
+
+```rust
+use firelocal_core::FireLocal;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create database
+    let mut db = FireLocal::new("./my_database")?;
+    
+    // Store data
+    db.put("users/alice".to_string(), 
+           serde_json::to_vec(&serde_json::json!({
+               "name": "Alice",
+               "age": 30
+           }))?)?;
+    
+    // Retrieve data
+    if let Some(data) = db.get("users/alice")? {
+        let user: serde_json::Value = serde_json::from_slice(&data)?;
+        println!("User: {}", user);
+    }
+    
+    Ok(())
+}
+```
+
+---
+
+## Installation Guide
+
+### Rust Core Library
+
+```bash
+# Add to Cargo.toml
+[dependencies]
+firelocal-core = { git = "https://github.com/rajdipk/Firelocal.git" }
+
+# Or install from crates.io (when published)
+cargo add firelocal-core
+```
+
+### JavaScript/Node.js
+
+```bash
+# Install npm package
+npm install @firelocal/node
+
+# Usage
+const { FireLocal } = require('@firelocal/node');
+const db = new FireLocal('./database');
+```
+
+### WebAssembly (WASM)
+
+```bash
+# Install npm package
+npm install firelocal-wasm
+
+# Usage in browser
+import { FireLocal } from 'firelocal-wasm';
+const db = new FireLocal('./database');
+```
+
+### CLI Tool
+
+```bash
+# Install from source
+cargo install --path /path/to/Firelocal/firelocal-cli
+
+# Or from crates.io (when published)
+cargo install firelocal-cli
+
+# Basic usage
+firelocal-cli put users/alice '{"name":"Alice","age":30}'
+firelocal-cli get users/alice
+```
+
+### Python Bindings
+
+```bash
+# Install from PyPI (when published)
+pip install firelocal
+
+# Development installation
+cd bindings/python
+pip install -e .
+```
+
+### Dart Bindings
+
+```bash
+# Add to pubspec.yaml
+dependencies:
+  firelocal:
+    git: https://github.com/rajdipk/Firelocal.git
+
+# Install dependencies
+dart pub get
+```
+
+### C#/.NET Bindings
+
+```bash
+# Add NuGet package (when published)
+dotnet add package FireLocal
+
+# Or reference local project
+dotnet add reference ../bindings/dotnet/FireLocal.csproj
+```
+
+---
+
+## Core Concepts
+
+### Database Structure
+
+FireLocal uses an LSM-Tree (Log-Structured Merge Tree) architecture:
+
+- **WAL (Write-Ahead Log)**: All writes first go here for durability
+- **Memtable**: In-memory sorted structure for recent writes
+- **SST (Sorted String Table)**: Immutable files for long-term storage
+- **Compaction**: Background process to merge SST files and remove tombstones
+
+### ACID Properties
+
+- **Atomicity**: Transactions are all-or-nothing
+- **Consistency**: Database always moves from one valid state to another
+- **Isolation**: Concurrent transactions don't interfere with each other
+- **Durability**: Committed changes survive system crashes
+
+### Security Model
+
+FireLocal implements a Firebase-compatible security rules engine:
+
+```javascript
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+    match /posts/{postId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
+```
+
+---
+
+## API Reference
+
+### Core Rust API
+
+#### Database Operations
+
+```rust
+// Create/open database
+let mut db = FireLocal::new("./path")?;
+
+// Write document
+db.put("collection/doc".to_string(), data)?;
+
+// Read document
+let data = db.get("collection/doc")?; // Returns Option<Vec<u8>>
+
+// Delete document
+db.delete("collection/doc".to_string())?;
+
+// Query documents
+let results = db.query("collection/*")?;
+
+// Batch operations
+let batch = db.batch();
+batch.set("users/alice".to_string(), alice_data);
+batch.set("users/bob".to_string(), bob_data);
+db.commit_batch(batch)?;
+
+// Transaction
+let txn = db.transaction();
+txn.read("users/alice");
+txn.set("users/alice".to_string(), new_data);
+txn.validate(|path| get_version(path), |path| get_data(path))?;
+txn.commit()?;
+```
+
+#### Listeners
+
+```rust
+// Listen for changes
+let listener_id = db.listen(
+    QueryAst::parse("users/*")?,
+    |docs| println!("Documents changed: {:?}", docs)
+);
+
+// Stop listening
+db.unlisten(listener_id);
+```
+
+### Security Configuration
+
+```rust
+// Load security rules
+db.load_rules(r#"
+  service cloud.firestore {
+    match /databases/{database}/documents {
+      match /{document=**} {
+        allow read, write: if true;
+      }
+    }
+  }
+"#)?;
+
+// Configure security limits (via environment variables)
+// FIRELOCAL_MAX_REQUESTS_PER_MINUTE=1000
+// FIRELOCAL_MAX_DOCUMENT_SIZE=10485760
+// FIRELOCAL_AUTH_ENABLED=true
+// FIRELOCAL_RATE_LIMIT_ENABLED=true
+```
+
+---
+
+## Security Rules
+
+### Rule Syntax
+
+FireLocal uses Firebase's security rules syntax:
+
+```javascript
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Public read access
+    match /public/{doc} {
+      allow read: if true;
+      allow write: if false;
+    }
+    
+    // User-specific access
+    match /users/{userId} {
+      allow read, write: if 
+        request.auth != null && 
+        request.auth.uid == userId;
+    }
+    
+    // Role-based access
+    match /admin/{doc} {
+      allow read, write: if 
+        request.auth != null && 
+        request.auth.token.admin == true;
+    }
+  }
+}
+```
+
+### Built-in Functions
+
+- `request.auth` - Authentication information
+- `request.time` - Current timestamp
+- `request.resource` - Resource being accessed
+- `resource.data` - Existing document data
+- `request.method` - HTTP method (get, post, put, delete)
+
+### Security Features
+
+- **Authentication**: User identity verification
+- **Authorization**: Rule-based access control
+- **Input Validation**: Path and data sanitization
+- **Rate Limiting**: Configurable request limits
+- **Audit Logging**: Security event tracking
+
+---
+
+## Examples
+
+### Web Application
+
+```javascript
+import { FireLocal } from 'firelocal-wasm';
+
+class UserService {
+  constructor() {
+    this.db = new FireLocal('./user_data');
+  }
+  
+  async createUser(userData) {
+    const userId = this.generateId();
+    await this.db.put(`users/${userId}`, JSON.stringify(userData));
+    return userId;
+  }
+  
+  async getUser(userId) {
+    const data = await this.db.get(`users/${userId}`);
+    return data ? JSON.parse(data) : null;
+  }
+  
+  async updateUser(userId, updates) {
+    const current = await this.getUser(userId);
+    if (!current) throw new Error('User not found');
+    
+    const updated = { ...current, ...updates };
+    await this.db.put(`users/${userId}`, JSON.stringify(updated));
+  }
+}
+```
+
+### CLI Application
+
+```rust
+use firelocal_core::FireLocal;
+use clap::{Parser, Subcommand};
+
+#[derive(Parser)]
+struct Cli {
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    Put { key: String, value: String },
+    Get { key: String },
+    Delete { key: String },
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+    let mut db = FireLocal::new("./data")?;
+    
+    match cli.command {
+        Commands::Put { key, value } => {
+            db.put(key, value.into_bytes())?;
+            println!("✅ Stored {}", key);
+        }
+        Commands::Get { key } => {
+            if let Some(data) = db.get(&key)? {
+                println!("{}", String::from_utf8(data)?);
+            } else {
+                println!("❌ Not found");
+            }
+        }
+        Commands::Delete { key } => {
+            db.delete(key)?;
+            println!("🗑️ Deleted {}", key);
+        }
+    }
+    
+    Ok(())
+}
+```
+
+---
+
+## Performance Tuning
+
+### Benchmarks
+
+FireLocal has been benchmarked extensively:
+
+| Operation | Performance | Notes |
+|-----------|-------------|---------|
+| **Read** | 411,271 ops/sec | Extremely fast due to LSM-Tree |
+| **Write** | 31.46 ops/sec | Limited by disk I/O and WAL |
+| **Mixed** | 63.00 ops/sec | Realistic workload |
+| **Large Docs** | 32.62 ops/sec | 1MB+ documents |
+
+### Optimization Tips
+
+1. **Batch Operations**: Use batches for multiple writes
+2. **Appropriate Transactions**: Keep transactions small
+3. **Regular Compaction**: Prevents SST file accumulation
+4. **Memory Settings**: Adjust memtable size for your workload
+5. **Storage Type**: Use SSD for better WAL performance
+
+### Monitoring
+
+```rust
+// Health checks
+let health = db.health_check();
+println!("Database healthy: {}", health.is_healthy());
+
+// Performance metrics
+let metrics = db.get_metrics();
+println!("Read ops: {}", metrics.read_operations);
+println!("Write ops: {}", metrics.write_operations);
+println!("Cache hit rate: {}", metrics.cache_hit_rate);
+```
+
+---
+
+## Production Deployment
+
+### Environment Configuration
+
+```bash
+# Security limits
+export FIRELOCAL_MAX_REQUESTS_PER_MINUTE=1000
+export FIRELOCAL_MAX_DOCUMENT_SIZE=10485760
+export FIRELOCAL_MAX_PATH_DEPTH=32
+
+# Feature flags
+export FIRELOCAL_AUTH_ENABLED=true
+export FIRELOCAL_RATE_LIMIT_ENABLED=true
+export FIRELOCAL_AUDIT_LOGGING=true
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM rust:1.70 as builder
+WORKDIR /app
+COPY . .
+RUN cargo build --release
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y ca-certificates
+COPY --from=builder /app/target/release/firelocal-cli /usr/local/bin/
+EXPOSE 8080
+CMD ["firelocal-cli"]
+```
+
+### Kubernetes Deployment
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: firelocal
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: firelocal
+  template:
+    metadata:
+      labels:
+        app: firelocal
+    spec:
+      containers:
+      - name: firelocal
+        image: firelocal:latest
+        env:
+        - name: FIRELOCAL_MAX_REQUESTS_PER_MINUTE
+          value: "1000"
+        - name: FIRELOCAL_AUTH_ENABLED
+          value: "true"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+```
+
+### Monitoring Setup
+
+```rust
+use firelocal_core::monitoring::*;
+
+// Set up monitoring
+let monitor = Monitoring::new()
+    .with_health_check_interval(Duration::from_secs(30))
+    .with_metrics_collection(true)
+    .with_alert_thresholds(AlertThresholds {
+        error_rate: 0.05,  // 5% error rate
+        response_time: Duration::from_millis(1000),
+        memory_usage: 0.8,  // 80% memory
+    });
+
+monitor.start(&db);
+```
+
+### Backup Strategy
+
+```bash
+#!/bin/bash
+# Backup script
+BACKUP_DIR="/backups/firelocal"
+DATE=$(date +%Y%m%d_%H%M%S)
+
+# Create backup
+tar -czf "$BACKUP_DIR/backup_$DATE.tar.gz" \
+    --exclude='wal.log.lock' \
+    ./database/
+
+# Keep last 7 days
+find "$BACKUP_DIR" -name "backup_*.tar.gz" -mtime +7 -delete
+
+echo "Backup completed: backup_$DATE.tar.gz"
+```
+
+---
+
+## Troubleshooting
+
+### Common Issues
+
+#### Database Won't Open
+
+```bash
+# Check permissions
+ls -la ./database/
+
+# Check for lock files
+find ./database/ -name "*.lock"
+
+# Remove stale locks (carefully)
+rm ./database/wal.log.lock
+```
+
+#### Performance Issues
+
+```rust
+// Check for excessive WAL size
+let wal_size = std::fs::metadata("./database/wal.log")?.len();
+if wal_size > 100_000_000 {  // 100MB
+    println!("Warning: Large WAL file, consider compaction");
+    db.compact()?;
+}
+
+// Check SST file count
+let sst_count = std::fs::read_dir("./database/")?
+    .filter(|entry| entry.as_ref().ok()
+        .map(|e| e.file_name().to_string_lossy().starts_with("sst_"))
+    .count();
+    
+if sst_count > 10 {
+    println!("Warning: Many SST files, consider compaction");
+}
+```
+
+#### Memory Issues
+
+```rust
+// Monitor memory usage
+let metrics = db.get_memory_metrics();
+println!("Memtable size: {} bytes", metrics.memtable_size);
+println!("Cache size: {} bytes", metrics.cache_size);
+
+// Clear caches if needed
+if metrics.cache_size > 100_000_000 {  // 100MB
+    db.clear_caches();
+}
+```
+
+### Error Recovery
+
+FireLocal includes automatic recovery mechanisms:
+
+1. **WAL Recovery**: Automatically replays WAL after crash
+2. **Mutex Poison Recovery**: Handles poisoned mutexes with data validation
+3. **File Corruption Detection**: Validates file integrity on startup
+4. **Graceful Degradation**: Continues operation with limited functionality
+
+### Debug Mode
+
+```bash
+# Enable debug logging
+export RUST_LOG=firelocal_core=debug
+
+# Run with detailed output
+firelocal-cli --verbose get users/alice
+```
+
+---
+
+## FAQ
+
+### General Questions
+
+**Q: Is FireLocal compatible with Firebase?**  
+A: FireLocal provides a Firestore-compatible API, but it's completely offline. No Firebase connection is required.
+
+**Q: How does FireLocal handle concurrent access?**  
+A: FireLocal uses proper mutex locking and file-based locking to ensure thread safety and prevent race conditions.
+
+**Q: Can FireLocal be used in production?**  
+A: Yes! FireLocal is production-ready with enterprise-grade security, monitoring, and error handling.
+
+### Performance Questions
+
+**Q: Why are writes slower than reads?**  
+A: Writes must go to WAL for durability, then eventually to SST files. Reads can directly access optimized SST files.
+
+**Q: How can I improve performance?**  
+A: Use batch operations, keep transactions small, ensure regular compaction, and use SSD storage.
+
+### Security Questions
+
+**Q: How do security rules work?**  
+A: FireLocal implements Firebase's security rules engine, allowing fine-grained access control based on user authentication and document data.
+
+**Q: Is data encrypted?**  
+A: FireLocal focuses on API compatibility. Encryption should be handled at the application level if required.
+
+### Technical Questions
+
+**Q: What happens if the application crashes?**  
+A: FireLocal automatically recovers from WAL on next startup, ensuring no data loss.
+
+**Q: Can I use FireLocal in the browser?**  
+A: Yes! FireLocal provides WebAssembly bindings for browser usage with IndexedDB persistence.
+
+**Q: How large can documents be?**  
+A: Default limit is 10MB, configurable via `FIRELOCAL_MAX_DOCUMENT_SIZE` environment variable.
+
+---
+
+## Getting Help
+
+- **Documentation**: [Complete Guide](README.md)
+- **GitHub Repository**: [FireLocal](https://github.com/rajdipk/Firelocal)
+- **Issues**: [Bug Reports](https://github.com/rajdipk/Firelocal/issues)
+- **Discussions**: [Community Forum](https://github.com/rajdipk/Firelocal/discussions)
+- **Examples**: [Sample Projects](https://github.com/rajdipk/Firelocal/tree/main/examples)
+
+---
+
+<div align="center">
+  <p><strong>Thank you for choosing FireLocal! 🚀</strong></p>
+  <p>Built with ❤️ for the offline-first community</p>
+</div>
 
 ✅ **Firestore-Compatible API** - Familiar API for Firebase developers  
 ✅ **Offline-First** - Works without internet connection  

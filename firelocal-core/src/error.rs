@@ -76,7 +76,14 @@ impl From<FireLocalError> for io::Error {
             }
             FireLocalError::Validation(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
             FireLocalError::Corruption(msg) => io::Error::new(io::ErrorKind::InvalidData, msg),
-            _ => io::Error::other(err.to_string()),
+            FireLocalError::RateLimitExceeded(msg) => io::Error::new(io::ErrorKind::WouldBlock, msg),
+            FireLocalError::Network(msg) => io::Error::new(io::ErrorKind::ConnectionAborted, msg),
+            FireLocalError::Storage(msg) => io::Error::new(io::ErrorKind::Other, msg),
+            FireLocalError::Transaction(msg) => io::Error::new(io::ErrorKind::Other, msg),
+            FireLocalError::Security(msg) => io::Error::new(io::ErrorKind::PermissionDenied, msg),
+            FireLocalError::Configuration(msg) => io::Error::new(io::ErrorKind::InvalidInput, msg),
+            FireLocalError::Serialization(msg) => io::Error::new(io::ErrorKind::InvalidData, msg),
+            FireLocalError::Generic(msg) => io::Error::other(msg),
         }
     }
 }
