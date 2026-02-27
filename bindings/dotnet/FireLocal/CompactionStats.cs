@@ -1,3 +1,5 @@
+using System;
+
 namespace FireLocal
 {
     /// <summary>

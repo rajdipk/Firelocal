@@ -1,9 +1,129 @@
-/target
+# Rust build artifacts
+/target/
 **/*.rs.bk
 Cargo.lock
+
+# Environment and secrets
 .env
-.idea
-.vscode
+.env.*
+*.pem
+*.key
+*.p12
+secrets/
+credentials/
+
+# IDE files
+.idea/
+.vscode/
 *.iml
 *.swp
+*.swo
+*~
+
+# OS files
 .DS_Store
+Thumbs.db
+desktop.ini
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm
+.eslintcache
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Dart/Flutter
+.dart_tool/
+.packages
+.pub-cache/
+build/
+.flutter-plugins
+.android/
+.ios/
+
+# .NET
+bin/
+obj/
+*.user
+*.suo
+*.cache
+*.log
+*.vspscc
+
+# WASM
+pkg/
+*.wasm
+*.js
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+data/
+databases/
+
+# Test artifacts
+test_data/
+test-results/
+coverage/
+.nyc_output
+.coverage
+
+# CI/CD
+.github/workflows/logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.temp
+
+# Package manager artifacts
+*.nupkg
+*.tgz
+*.tar.gz
+*.zip
+
+# Profiling and benchmarking
+perf.data*
+flamegraph.svg
+criterion/
+
+# Security scan results
+security-reports/
+*.sarif
+advisory-db/
+
+# Documentation build
+docs/build/
+site/
+
+# Backup files
+*.bak
+*.backup
+*.old

@@ -79,9 +79,23 @@ DynamicLibrary _loadLibrary() {
       }
     }
   } else if (Platform.isMacOS) {
-    return DynamicLibrary.open('libfirelocal_core.dylib');
+    // Try multiple paths for macOS
+    try {
+      return DynamicLibrary.open('libfirelocal_core.dylib');
+    } catch (e) {
+      return DynamicLibrary.open('/home/pikachu/projects/Firelocal/target/release/libfirelocal_core.dylib');
+    }
   } else {
-    return DynamicLibrary.open('libfirelocal_core.so');
+    // Linux - try multiple paths
+    try {
+      return DynamicLibrary.open('libfirelocal_core.so');
+    } catch (e) {
+      try {
+        return DynamicLibrary.open('/home/pikachu/projects/Firelocal/target/release/libfirelocal_core.so');
+      } catch (e2) {
+        return DynamicLibrary.open('/home/pikachu/projects/Firelocal/target/debug/libfirelocal_core.so');
+      }
+    }
   }
 }
 
