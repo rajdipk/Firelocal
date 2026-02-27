@@ -289,6 +289,7 @@ mod tests {
         
         let result = txn2.validate(|_| None, |_| None);
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("write conflict"));
+        let error_msg = result.unwrap_err().to_string();
+        assert!(error_msg.contains("Transaction conflict"));
     }
 }
