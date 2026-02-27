@@ -81,9 +81,9 @@ fn test_permission_denied_on_read() {
     "#;
     db.load_rules(read_rules).expect("Failed to load rules");
 
-    // Try to read - should return None (permission denied)
+    // Try to read - should return error (permission denied)
     let result = db.get("users/alice");
-    assert!(result.unwrap().is_none(), "Read should be denied by rules");
+    assert!(result.is_err(), "Read should be denied by rules");
 
     // Cleanup
     let _ = fs::remove_dir_all(test_dir);

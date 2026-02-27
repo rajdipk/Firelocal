@@ -37,7 +37,7 @@ fn test_rules_parser_and_enforcement() {
     assert!(db.put("posts/123".to_string(), b"data".to_vec()).is_err());
 
     // 6. Test Denied Read
-    assert!(db.get("posts/123").unwrap().is_none()); // get returns None on error/missing
+    assert!(db.get("posts/123").is_err()); // get returns error on permission denied
 
     let _ = fs::remove_dir_all(path);
 }

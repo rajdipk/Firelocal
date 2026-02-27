@@ -57,13 +57,13 @@ fn test_sync_flow() {
     // 3. Clear local
     // (Simulate by deleting)
     db.delete("users/sync_user".to_string()).unwrap();
-    assert!(db.get("users/sync_user").is_none());
+    assert!(db.get("users/sync_user").expect("Failed to get sync_user").is_none());
 
     // 4. Sync Pull
     db.sync_pull("users/sync_user").unwrap();
 
     // Verify it's back
-    assert!(db.get("users/sync_user").is_some());
+    assert!(db.get("users/sync_user").expect("Failed to get sync_user").is_some());
 
     let _ = fs::remove_dir_all(path);
 }

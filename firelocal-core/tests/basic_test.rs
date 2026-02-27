@@ -11,8 +11,8 @@ fn test_basic_put_get() {
 
     db.put("key1".to_string(), b"val1".to_vec()).unwrap();
 
-    assert_eq!(db.get("key1"), Some(b"val1".to_vec()));
-    assert_eq!(db.get("key2"), None);
+    assert_eq!(db.get("key1").expect("Failed to get key1"), Some(b"val1".to_vec()));
+    assert_eq!(db.get("key2").expect("Failed to get key2"), None);
 
     let _ = fs::remove_dir_all(path);
 }
@@ -26,7 +26,7 @@ fn test_delete() {
     db.load_rules("service cloud.firestore { match /databases/{database}/documents { match /{document=**} { allow read, write: if true; } } }").unwrap();
 
     db.put("k".to_string(), b"v".to_vec()).unwrap();
-    assert_eq!(db.get("k").unwrap(), b"v".to_vec());
+    assert_eq!(db.get("k").expect("Failed to get k"), Some(b"v".to_vec()));
 
     db.delete("k".to_string()).unwrap();
     // Memtable.delete sets tombstone.
@@ -34,7 +34,7 @@ fn test_delete() {
     // Let's check Memtable implementation...
     // My memtable.get returns Some(val) for Put, and None for Delete.
     // So this should pass.
-    assert!(db.get("k").is_none());
+    assert!(db.get("k").expect("Failed to get k").is_none());
 
     let _ = fs::remove_dir_all(path);
 }

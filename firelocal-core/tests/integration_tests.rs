@@ -16,7 +16,7 @@ fn test_put_get_delete_cycle() {
         .expect("Failed to put document");
 
     // Get the document
-    let retrieved = db.get(key).expect("Failed to get document");
+    let retrieved = db.get(key).expect("Failed to get document").expect("Document should exist");
     assert_eq!(retrieved, value, "Retrieved value should match put value");
 
     // Delete the document
@@ -24,7 +24,7 @@ fn test_put_get_delete_cycle() {
         .expect("Failed to delete document");
 
     // Verify deletion
-    let after_delete = db.get(key);
+    let after_delete = db.get(key).expect("Failed to get document after delete");
     assert!(after_delete.is_none(), "Document should be deleted");
 
     // Cleanup
@@ -53,7 +53,7 @@ fn test_multiple_documents() {
 
     // Verify all documents
     for (key, expected_value) in &docs {
-        let retrieved = db.get(key).expect("Failed to get document");
+        let retrieved = db.get(key).expect("Failed to get document").expect("Document should exist");
         assert_eq!(
             retrieved,
             expected_value.to_vec(),
@@ -87,11 +87,11 @@ fn test_batch_operations() {
 
     // Verify operations
     assert!(
-        db.get("users/alice").is_some(),
+        db.get("users/alice").expect("Failed to get alice").is_some(),
         "Alice should exist after batch commit"
     );
     assert!(
-        db.get("users/bob").is_some(),
+        db.get("users/bob").expect("Failed to get bob").is_some(),
         "Bob should exist after batch commit"
     );
 
@@ -120,7 +120,7 @@ fn test_overwrite_document() {
         .expect("Failed to update document");
 
     // Verify new data
-    let retrieved = db.get(key).expect("Failed to get document");
+    let retrieved = db.get(key).expect("Failed to get document").expect("Document should exist");
     assert_eq!(retrieved, updated, "Document should be updated");
 
     // Cleanup
@@ -144,7 +144,7 @@ fn test_flush_operation() {
 
     // Verify document still exists
     assert!(
-        db.get("users/alice").is_some(),
+        db.get("users/alice").expect("Failed to get document").is_some(),
         "Document should exist after flush"
     );
 
@@ -199,7 +199,7 @@ fn test_persistence_across_instances() {
     // Second instance: verify data persists
     {
         let db = FireLocal::new(test_dir).expect("Failed to open database");
-        let retrieved = db.get("users/alice").expect("Failed to get document");
+        let retrieved = db.get("users/alice").expect("Failed to get document").expect("Document should exist");
         assert_eq!(
             retrieved,
             br#"{"name":"Alice"}"#.to_vec(),
@@ -220,7 +220,7 @@ fn test_empty_database() {
     let db = FireLocal::new(test_dir).expect("Failed to create database");
 
     // Get from empty database
-    let result = db.get("nonexistent");
+    let result = db.get("nonexistent").expect("Failed to get document");
     assert!(
         result.is_none(),
         "Get from empty database should return None"
@@ -244,7 +244,7 @@ fn test_large_document() {
         .expect("Failed to put large document");
 
     // Retrieve and verify
-    let retrieved = db.get("large/doc").expect("Failed to get large document");
+    let retrieved = db.get("large/doc").expect("Failed to get large document").expect("Large document should exist");
     assert_eq!(
         retrieved.len(),
         large_data.len(),
@@ -278,7 +278,7 @@ fn test_special_characters_in_path() {
 
     // Verify all paths
     for path in &paths {
-        assert!(db.get(path).is_some(), "Document at {} should exist", path);
+        assert!(db.get(path).expect("Failed to get document").is_some(), "Document at {} should exist", path);
     }
 
     // Cleanup
